@@ -1,0 +1,42 @@
+services:
+
+  coredns:
+    image: coredns/coredns:latest
+    container_name: coredns
+    restart: unless-stopped
+    command: -conf /etc/coredns/Corefile
+    volumes:
+      - ./coredns/Corefile:/etc/coredns/Corefile:ro
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+
+  fluent-bit-agent:
+    image: fluent/fluent-bit:latest
+    container_name: fb-agent
+    restart: unless-stopped
+    depends_on:
+      - coredns
+    volumes:
+      - ./fluent-bit/agent.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: ["-c", "/fluent-bit/etc/fluent-bit.conf"]
+
+  ml-model:
+    build: ./ml-model
+    container_name: ml-model
+    restart: unless-stopped
+    depends_on:
+      - fluent-bit-agent
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./logs:/logs
+
+  test-client:
+    build: ./test-client
+    container_name: test-client
+    stdin_open: true
+    tty: true
+    depends_on:
+      - coredns
