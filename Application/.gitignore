@@ -248,3 +248,7 @@ fabric.properties
 
 # PyPI configuration file
 .pypirc
+
+
+logs/
+
