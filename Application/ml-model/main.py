@@ -6,6 +6,16 @@ import re
 import math
 import dns.resolver
 import requests
+import joblib
+import numpy as np
+import pandas as pd
+
+# Load the trained model and features
+current_dir = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(current_dir, 'dns_classifier.joblib')
+model_dict = joblib.load(model_path)
+model = model_dict['model']
+feature_names = model_dict['features']
 
 def calculate_entropy(s):
     # Calculates the entropy of a string
@@ -15,11 +25,12 @@ def calculate_entropy(s):
 def extract_features_from_log_string(log_string):
     features = {}
 
-    # Regular expression to extract the domain name
-    domain_match = re.search(r'"A IN ([a-z0-9.-]+\.[a-z]{2,})', log_string)
+    # Updated regex to handle CoreDNS log format with possible https:// prefix
+    domain_match = re.search(r'"(?:[A-Z]+) IN (?:https?://)?([a-z0-9.-]+\.[a-z0-9-]+\.?)[^"]*"', log_string)
 
     if domain_match:
-        domain = domain_match.group(1)
+        # Clean the domain by removing trailing dots and spaces
+        domain = domain_match.group(1).rstrip('.). ')
         features['domain'] = domain
 
         # DNS Record type
@@ -149,9 +160,26 @@ def extract_features_from_log_string(log_string):
         except requests.exceptions.RequestException:
             features['http_response_code'] = -1 #Indicates an error.
 
+        # Align features with training data
+        features['TXTDnsResponse'] = int(features.get('has_txt_dns_response', False))
+        features['NumericRatio'] = features.get('numeric_ratio', 0)
+        features['SpecialCharRatio'] = features.get('special_char_ratio', 0)
+        features['VowelRatio'] = features.get('vowel_ratio', 0)
+        features['ConsoantRatio'] = features.get('consonant_ratio', 0)
+        features['DNSRecordNum'] = features.get('dns_record_type', 0)
+        features['MXDnsResponse'] = int(features.get('has_mx_response', False))
+        features['HasSPFInfo'] = int(features.get('has_spf_info', False))
+        features['HasDkimInfo'] = int(features.get('has_dkim_info', False))
+        features['HasDmarcInfo'] = int(features.get('has_dmarc_info', False))
+        features['HttpResponseCode'] = features.get('http_response_code', -1)
+        features['ConsoantSequence'] = features.get('consonant_sequence', 0)
+        features['VowelSequence'] = features.get('vowel_sequence', 0)
+        features['NumericSequence'] = features.get('numeric_sequence', 0)
+        features['SpecialCharSequence'] = features.get('special_char_sequence', 0)
+        features['EntropyOfSubDomains'] = features.get('subdomain_entropy', 0)
+
         return features
-    else:
-        return None  # Or return an empty dictionary.
+    return None
 
     
 app = Flask(__name__)
@@ -171,35 +199,53 @@ def write_to_log(message):
 @app.route('/logs', methods=['POST'])
 def handle_logs():
     try:
-        # Parse incoming JSON data
+        # Get the request data and validate
         data = request.get_json(force=True)
+        if not data or not isinstance(data, list) or len(data) == 0 or "log" not in data[0]:
+            write_to_log("Invalid request format")
+            return jsonify({
+                'error': 'Invalid request format',
+                'prediction': 0,
+                'malicious_probability': 0
+            }), 400
 
-        # Write the incoming raw data to the log file
-        write_to_log(f"Received data: {json.dumps(data, indent=2)}")
+        # Extract features
+        write_to_log("Raw log:" + str(data[0]["log"]))
+        features = extract_features_from_log_string(data[0]["log"])
+        
+        if not features:
+            write_to_log("Could not extract features from log")
+            return jsonify({
+                'error': 'Could not extract features from log',
+                'prediction': 0,
+                'malicious_probability': 0
+            }), 400
 
-        # Check if the "log" key exists in the parsed data
-        if "log" not in data[0]:  # Assuming the data is a list, check the first element
-            raise ValueError('Missing "log" key in the request body.')
+        # Create feature vector as pandas DataFrame with correct column names
+        feature_vector = pd.DataFrame([
+            [features.get(feat, 0) for feat in feature_names]
+        ], columns=feature_names)
 
-        # Extract the raw log from the first item in the list
-        raw_log_json = data[0]["log"]  # No need to parse again
-        raw_log = json.loads(raw_log_json)["log"]
-        # Write the raw log to the log file (as you were doing)
-        write_to_log(f"Raw log: {raw_log}")
+        # Make prediction
+        prediction = model.predict(feature_vector)[0]
+        probability = model.predict_proba(feature_vector)[0]
 
-        # Extract features from the raw log
-        features2 = extract_features_from_log_string(raw_log)
-        print(features2)
-        # Write the extracted features to the log file
-        write_to_log(f"Extracted features2: {json.dumps(features2, indent=2)}")
+        # Add prediction to response
+        features['prediction'] = int(prediction)
+        features['malicious_probability'] = float(probability[1])
 
-        # Return features for the ML model (to be sent to the model)
-        return jsonify(features2), 200
+        write_to_log(f"Successfully processed domain: {features.get('domain', 'unknown')}")
+        write_to_log(f"Prediction: {features['prediction']}, Probability: {features['malicious_probability']}")
+        return jsonify(features), 200
 
     except Exception as e:
-        # If there's an error, log the error message and return it
-        write_to_log(f"Error processing log: {str(e)}")
-        return {'error': str(e)}, 400
+        error_msg = f"Error processing request: {str(e)}"
+        write_to_log(error_msg)
+        return jsonify({
+            'error': error_msg,
+            'prediction': 0,
+            'malicious_probability': 0
+        }), 500
 
 
 if __name__ == '__main__':
