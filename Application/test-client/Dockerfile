@@ -1,4 +1,3 @@
-# Dockerfile.testclient
 FROM alpine:latest
 
 # Install dig and other DNS tools

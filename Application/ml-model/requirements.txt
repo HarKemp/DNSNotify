@@ -1,6 +1,7 @@
 flask==2.0.1
 requests==2.26.0
-Werkzeug==2.0.1
+clickhouse-connect==0.6.5
+werkzeug==2.0.3
 dnspython
 requests
 pandas

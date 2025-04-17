@@ -20,5 +20,5 @@
 ## Piezīmes
 * Nezinu vai lietosim flask, bet, ja lietojam kaut ko citu, tad tam ir jāstrādā ml-model konteinerī uz 5000 porta un pašus log failus jāpieņem /log subdirektorijā vai arī jāmaina konfigurācija ![agent.conf](Application/fluent-bit/agent.conf) failā
 * Jāmaina būtu arī ports ml-model/Dockerfile un docker-compose.yml failā.
-* coredns šobrīd mājaslapas IP adresi neatgriež
-* 
+* coredns šobrīd domēna IP adresi neatgriež
+* Ja tiek mainīta clickhouse saglabātās dns_logs tabulas struktūra (![init.sql](Application/clickhouse/init.sql) failā), tad jāmaina arī konfigurācija ![ml-model/main.py](Application/ml-model/main.py) failā
