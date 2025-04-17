@@ -1,8 +1,9 @@
-flask==2.0.1
-requests==2.26.0
-clickhouse-connect==0.6.5
-werkzeug==2.0.3
-dnspython
-requests
+werkzeug
+joblib
+numpy
 pandas
 scikit-learn
+dnspython
+clickhouse-connect
+fastapi
+uvicorn[standard]

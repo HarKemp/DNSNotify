@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify
+from fastapi import FastAPI, Request, HTTPException, status
+import uvicorn # ASGI server
 import json
 import os
 import re
@@ -12,7 +13,7 @@ import ipaddress
 from clickhouse_connect import get_client
 import time
 
-app = Flask(__name__)
+app = FastAPI()
 
 CLICKHOUSE_HOST = os.getenv('CLICKHOUSE_HOST', 'clickhouse')
 CLICKHOUSE_PORT = int(os.getenv('CLICKHOUSE_PORT', 8123))
@@ -22,7 +23,7 @@ CLICKHOUSE_DATABASE = os.getenv('CLICKHOUSE_DATABASE', 'default')
 CLICKHOUSE_TABLE = 'dns_logs'
 
 client = None
-max_retries = 5
+max_retries = 6
 retry_delay = 3 # seconds
 
 # Connect to clickhouse
@@ -183,36 +184,59 @@ log_pattern_db = re.compile(
     ''', re.VERBOSE
 )
 
-@app.route('/logs', methods=['POST'])
-def handle_logs():
-    try:
-        data = request.get_json(force=True)
+@app.post('/logs', status_code=status.HTTP_200_OK)
+async def handle_logs(request: Request):
+    raw_line = None
+    iso_time = None
+    db_row_data = None
 
-        raw_line = None
-        iso_time = None
-        db_row_data = None
+    try:
+        data = await request.json()
+
+        if not isinstance(data, list) or not data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid request format, expected non-empty list of log entries."
+            )
+
+        first_entry = data[0]
+        if "log" not in first_entry:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing 'log' field in first entry."
+            )
 
         try:
-            inner_log_json = json.loads(data[0]["log"])
+            inner_log_json = json.loads(first_entry["log"])
             raw_line = inner_log_json.get("log", "").strip()
             iso_time = inner_log_json.get("time")
-        except (json.JSONDecodeError, KeyError, AttributeError):
-            raw_line = data[0].get("log", "").strip()
-            if "date" in data[0]:
-                iso_time = datetime.datetime.fromtimestamp(data[0]["date"], tz=datetime.timezone.utc).isoformat()
+        except (json.JSONDecodeError, KeyError, AttributeError, TypeError):
+            raw_line = first_entry.get("log", "")  # Get potential raw string
+            if isinstance(raw_line, str):  # Check if it's a string
+                raw_line = raw_line.strip()
+            else:
+                raw_line = ""
+
+            # Get timestamp from outer 'date' field if possible
+            if "date" in first_entry and isinstance(first_entry["date"], (int, float)):
+                iso_time = datetime.datetime.fromtimestamp(first_entry["date"], tz=datetime.timezone.utc).isoformat()
+            else:
+                iso_time = None
             print("[WARN] Couldn't parse inner JSON, using raw log field and outer timestamp if available.")
 
         if not raw_line:
-            return jsonify({'error': 'Could not extract raw log line'}), 400
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Could not extract raw log line"
+            )
 
         features = extract_features_from_log_string(raw_line)
 
         if not features:
-            return jsonify({
-                'error': 'Could not extract features',
-                'prediction': 0,
-                'malicious_probability': 0
-            }), 400
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Could not extract features from log line."
+            )
 
         # Prepare feature vector
         feature_vector = pd.DataFrame([
@@ -247,15 +271,25 @@ def handle_logs():
         if db_row_data:
             write_to_log(db_row_data)
 
-        return jsonify(features), 200
+        return features
 
+
+    except HTTPException:
+        raise
+    except json.JSONDecodeError as json_err:
+        # Handle errors parsing the incoming request JSON
+        print(f"[ERROR] Invalid JSON received in request: {json_err}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid JSON format in request body: {str(json_err)}"
+        )
     except Exception as e:
-        return jsonify({
-            'error': str(e),
-            'prediction': 0,
-            'malicious_probability': 0
-        }), 500
+        print(f"[ERROR] Unhandled exception in handle_logs_fastapi: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {str(e)}"
+        )
 
-if __name__ == '__main__':
-    print("Starting Flask server...")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+if __name__ == "__main__":
+    print("Starting FastAPI server with Uvicorn...")
+    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=False)

@@ -31,8 +31,6 @@ services:
       - clickhouse
     ports:
       - "5000:5000"
-    volumes:
-      - ./logs:/logs
 
   clickhouse:
     image: clickhouse/clickhouse-server:latest
