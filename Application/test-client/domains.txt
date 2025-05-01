@@ -1,0 +1,6 @@
+google.com
+rtu.lv
+lsm.lv
+github.com
+docker.com
+wikipedia.org

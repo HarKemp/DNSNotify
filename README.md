@@ -22,7 +22,7 @@
 * Izpilda komandu, lai apskatītu tabulu, kurā tagad vajadzētu būt vismaz vienam ierakstam
 ```SELECT * FROM dns_logs;```
 * Svarīgākos datus var izvilkt ar komandu
-```SELECT log_time,client_ip,query_type,domain,response_code,prediction,malicious_probability FROM dns_logs;```
+```SELECT log_time,client_ip,domain,prediction,malicious_probability FROM dns_logs;```
 
 
 ## Piezīmes
@@ -31,9 +31,9 @@
 * Ar NATS implementāciju FastAPI vai Flask vairs nav vajadzīgs
 * Servisu/konteineru konfigurācija tagad ir pieejama .env failā
 * Coredns šobrīd domēna IP adresi neatgriež
-* Funkcijas, kas atbild par datu/log apstrādi tagad ir pieejamas ![ml_processing.py](Application/ml-model/ml_processing.py) failā
-* ![main.py](Application/ml-model/main.py) failā ir pieejamas funkcijas, kas izveido savienojumus ar NATS un Clickhouse
-* Ja tiek mainīta clickhouse saglabātās dns_logs tabulas struktūra (![init.sql](Application/clickhouse/init.sql) failā), tad jāmaina arī konfigurācija ![ml-model/main.py](Application/ml-model/ml_processing.py) failā
+* Funkcijas, kas atbild par datu/log apstrādi tagad ir pieejamas ![ml-model/ml_processing.py](Application/ml-model/ml_processing.py) failā
+* ![ml-model/main.py](Application/ml-model/main.py) failā ir pieejamas funkcijas, kas izveido savienojumus ar NATS un Clickhouse
+* Ja tiek mainīta clickhouse saglabātās dns_logs tabulas struktūra (![init.sql](Application/clickhouse/init.sql) failā), tad jāmaina arī konfigurācija ![ml-model/ml_processing.py](Application/ml-model/ml_processing.py) failā
 * Ja tiek mainīta tabulas struktūra, tad ir jāizdzēš clickhouse konteinera volumes
 ```docker compose down -v``` vai ```docker compose down clickhouse -v```
 * Tika izveidots pagaidu konteiners, kas "sūta" (Vēl ir jāveic MatterMost implementācija) brīdinājumus uz MatterMost
