@@ -26,28 +26,24 @@ services:
 #    command: ["-c", "/fluent-bit/etc/fluent-bit.conf"]
 #    networks:
 #      - dnsnotify
+
   vector:
-    image: timberio/vector:latest-alpine # Use a specific version if needed
+    image: timberio/vector:latest-alpine
     container_name: vector-agent
     restart: unless-stopped
     depends_on:
-      - coredns # Optional, depends if source needs coredns running first
-      - nats    # Depends on NATS to send logs
+      - coredns
+      - nats
     volumes:
-      # Mount the Vector configuration file
       - ./vector/vector.toml:/etc/vector/vector.toml:ro
-      # Mount the Docker socket to allow Vector to collect Docker logs
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Optional: Mount Docker container log directory if using 'file' source instead
       # - /var/lib/docker/containers:/var/lib/docker/containers:ro
     environment:
-      # Pass environment variables needed by vector.toml
-      - NATS_URL=${NATS_URL} # Read from .env via substitution
-      - NATS_LOG_SUBJECT=${NATS_LOG_SUBJECT} # Read from .env via substitution
-      # Add any other ENV VARS needed by vector config here
+      - NATS_URL=${NATS_URL}
+      - NATS_LOG_SUBJECT=${NATS_LOG_SUBJECT}
     networks:
       - dnsnotify
-  # +++ END Vector Service +++
 
   ml-model:
     build: ./ml-model
