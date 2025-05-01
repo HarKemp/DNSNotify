@@ -1,9 +1,7 @@
-werkzeug
 joblib
 numpy
 pandas
 scikit-learn
 dnspython
 clickhouse-connect
-fastapi
-uvicorn[standard]
+nats-py

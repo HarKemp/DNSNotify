@@ -10,42 +10,98 @@ services:
     ports:
       - "8153:53/udp"
       - "8153:53/tcp"
+    networks:
+      - dnsnotify
 
-  fluent-bit-agent:
-    image: fluent/fluent-bit:latest
-    container_name: fb-agent
+#  fb-agent:
+#    image: fluent/fluent-bit:latest
+#    container_name: fb-agent
+#    restart: unless-stopped
+#    depends_on:
+#      - coredns
+#      - nats
+#    volumes:
+#      - ./fluent-bit/agent.conf:/fluent-bit/etc/fluent-bit.conf:ro
+#      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+#    command: ["-c", "/fluent-bit/etc/fluent-bit.conf"]
+#    networks:
+#      - dnsnotify
+  vector:
+    image: timberio/vector:latest-alpine # Use a specific version if needed
+    container_name: vector-agent
     restart: unless-stopped
     depends_on:
-      - coredns
+      - coredns # Optional, depends if source needs coredns running first
+      - nats    # Depends on NATS to send logs
     volumes:
-      - ./fluent-bit/agent.conf:/fluent-bit/etc/fluent-bit.conf:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-    command: ["-c", "/fluent-bit/etc/fluent-bit.conf"]
+      # Mount the Vector configuration file
+      - ./vector/vector.toml:/etc/vector/vector.toml:ro
+      # Mount the Docker socket to allow Vector to collect Docker logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Optional: Mount Docker container log directory if using 'file' source instead
+      # - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    environment:
+      # Pass environment variables needed by vector.toml
+      - NATS_URL=${NATS_URL} # Read from .env via substitution
+      - NATS_LOG_SUBJECT=${NATS_LOG_SUBJECT} # Read from .env via substitution
+      # Add any other ENV VARS needed by vector config here
+    networks:
+      - dnsnotify
+  # +++ END Vector Service +++
 
   ml-model:
     build: ./ml-model
     container_name: ml-model
     restart: unless-stopped
     depends_on:
-      - fluent-bit-agent
+      - nats
       - clickhouse
+    env_file:
+      - .env
+    networks:
+      - dnsnotify
+
+  nats:
+    image: nats:latest
+    container_name: nats
+    restart: unless-stopped
+    command: "-js"
     ports:
-      - "5000:5000"
+      - "4222:4222" # Client port
+      - "8222:8222" # HTTP monitoring
+    networks:
+      - dnsnotify
+    volumes:
+      - nats-data:/data
 
   clickhouse:
     image: clickhouse/clickhouse-server:latest
     container_name: clickhouse
+    restart: unless-stopped
     ports:
       - "8123:8123"
       - "9000:9000"
     environment:
-      - CLICKHOUSE_USER=default
-      - CLICKHOUSE_PASSWORD=default
-      - CLICKHOUSE_DB=default
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - CLICKHOUSE_DB=${CLICKHOUSE_DATABASE}
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - ./clickhouse:/docker-entrypoint-initdb.d
-      - ./clickhouse/users.xml:/etc/clickhouse-server/users.d/default-password.xml:ro
+#      - ./clickhouse/users.xml:/etc/clickhouse-server/users.d/default-password.xml:ro
+    networks:
+      - dnsnotify
+
+  notification-service:
+    build: ./notification-service
+    container_name: notification-service
+    restart: unless-stopped
+    depends_on:
+      - nats
+    env_file:
+      - .env
+    networks:
+      - dnsnotify
 
   test-client:
     build: ./test-client
@@ -54,6 +110,13 @@ services:
     tty: true
     depends_on:
       - coredns
+    networks:
+      - dnsnotify
 
 volumes:
   clickhouse-data:
+  nats-data:
+
+networks:
+  dnsnotify:
+    driver: bridge

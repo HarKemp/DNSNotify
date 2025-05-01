@@ -1,10 +1,8 @@
-from fastapi import FastAPI, Request, HTTPException, status
-import uvicorn # ASGI server
+import asyncio
+import nats
 import json
 import os
-import re
-import math
-import dns.resolver
+from nats.errors import ConnectionClosedError, TimeoutError, NoServersError
 import joblib
 import numpy as np
 import pandas as pd
@@ -13,283 +11,186 @@ import ipaddress
 from clickhouse_connect import get_client
 import time
 
-app = FastAPI()
+from ml_processing import process_log_entry, write_to_log
+
+NATS_URL = os.getenv('NATS_URL', 'nats://nats:4222')
+NATS_LOG_SUBJECT = os.getenv('NATS_LOG_SUBJECT', "dns.logs")
+NATS_NOTIFY_SUBJECT = os.getenv('NATS_NOTIFY_SUBJECT', "dns.malicious.notify")
+NATS_STREAM_NAME = os.getenv('NATS_STREAM_NAME', "DNSLogsStream")
+NATS_CONSUMER_NAME = os.getenv('NATS_CONSUMER_NAME', "MLProcessorBatch")
+BATCH_SIZE = int(os.getenv('BATCH_SIZE', '100'))
+BATCH_WAIT_TIMEOUT = float(os.getenv('BATCH_WAIT_TIMEOUT', '1.0'))
 
 CLICKHOUSE_HOST = os.getenv('CLICKHOUSE_HOST', 'clickhouse')
-CLICKHOUSE_PORT = int(os.getenv('CLICKHOUSE_PORT', 8123))
+CLICKHOUSE_PORT = int(os.getenv('CLICKHOUSE_PORT', '8123'))
 CLICKHOUSE_USER = os.getenv('CLICKHOUSE_USER', 'default')
 CLICKHOUSE_PASSWORD = os.getenv('CLICKHOUSE_PASSWORD', 'default')
 CLICKHOUSE_DATABASE = os.getenv('CLICKHOUSE_DATABASE', 'default')
+
 CLICKHOUSE_TABLE = 'dns_logs'
+CLICKHOUSE_RECONNECT_RETRIES = 6
+CLICKHOUSE_RETRY_DELAY = 3
+
 
 client = None
-max_retries = 6
-retry_delay = 3 # seconds
+ml_model = None
+feature_names = []
+
 
 # Connect to clickhouse
-for attempt in range(max_retries):
-    try:
-        client = get_client(
-            host=CLICKHOUSE_HOST,
-            port=CLICKHOUSE_PORT,
-            username=CLICKHOUSE_USER,
-            password=CLICKHOUSE_PASSWORD,
-            database=CLICKHOUSE_DATABASE,
-            connect_timeout = 5,
-            send_receive_timeout = 10
-        )
-        client.command('SELECT 1') # Test connection
-        print(f"Successfully connected to ClickHouse on attempt {attempt + 1}.")
-        break
-    except Exception as e:
-        print(f"[WARN] Connection attempt {attempt + 1}/{max_retries} failed: {e}")
-        if attempt < max_retries - 1:
-            print(f"Retrying in {retry_delay} seconds...")
-            time.sleep(retry_delay)
-        else:
-            print("[ERROR] Max retries reached. Failed to connect to ClickHouse. Logs will not be stored.")
-            client = None
-
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(current_dir, 'dns_classifier.joblib')
-model_dict = joblib.load(model_path)
-model = model_dict['model']
-feature_names = model_dict['features']
-
-def calculate_entropy(s):
-    probabilities = [float(s.count(c)) / len(s) for c in dict.fromkeys(list(s))]
-    return -sum([p * math.log(p, 2) for p in probabilities if p > 0])
-
-def write_to_log(rows_to_insert):
-    if not client:
-        print("[WARN] ClickHouse client not available. Skipping DB insert.")
-        return
-    if not rows_to_insert:
-        print("[INFO] No rows provided for DB insertion.")
-        return
-
-    try:
-        column_names = [
-            'log_time',           # DateTime
-            'client_ip',          # IPv4 or IPv6 or String
-            'client_port',        # UInt
-            'query_id',           # UInt
-            'query_type',         # String
-            'domain',             # String
-            'protocol',           # String
-            'response_code',      # String
-            'flags',              # String
-            'response_time',      # Float
-            'prediction',         # Int
-            'malicious_probability', # Float
-            'raw_log'             # String
-        ]
-        client.insert(CLICKHOUSE_TABLE, rows_to_insert, column_names=column_names)
-        print(f"Inserted {len(rows_to_insert)} row(s) into ClickHouse.")
-    except Exception as e:
-        print(f"[ERROR] Failed to insert into ClickHouse: {e}")
-
-def extract_features_from_log_string(log_string):
-    if not log_string:
-        return None
-
-    features = {}
-
-    # Extract domain from CoreDNS log format
-    domain_match = re.search(r'"(?:[A-Z]+) IN (?:https?://)?([a-z0-9.-]+\.[a-z0-9-]+\.?)[^"]*"', log_string)
-
-    if domain_match:
-        domain = domain_match.group(1).rstrip('.). ')
-        features['domain'] = domain
-
-        # Basic domain features
-        features['domain_length'] = len(domain)
-        features['domain_entropy'] = calculate_entropy(domain)
-
-        # Character-based features
-        domain_lower = domain.lower()
-        total_length = len(domain)
-
-        features['numeric_ratio'] = sum(c.isdigit() for c in domain) / total_length
-        features['special_char_ratio'] = sum(not c.isalnum() for c in domain) / total_length
-        features['vowel_ratio'] = sum(c in 'aeiou' for c in domain_lower) / total_length
-        features['consonant_ratio'] = sum(c in 'bcdfghjklmnpqrstvwxyz' for c in domain_lower) / total_length
-
-        # DNS features with timeout
-        resolver = dns.resolver.Resolver()
-        resolver.timeout = 1
-        resolver.lifetime = 1
-
+def connect_clickhouse():
+    global client
+    max_retries = CLICKHOUSE_RECONNECT_RETRIES
+    retry_delay = CLICKHOUSE_RETRY_DELAY
+    print("Attempting to connect to ClickHouse...")
+    for attempt in range(max_retries):
         try:
-            a_records = resolver.resolve(domain, 'A')
-            features['dns_record_type'] = 1
-            features['ip_count'] = len(a_records)
-        except dns.resolver.NXDOMAIN:
-            features['dns_record_type'] = -1
-            features['ip_count'] = 0
-        except Exception:
-            features['dns_record_type'] = 0
-            features['ip_count'] = 0
-
-        # MX record check
-        try:
-            mx_records = resolver.resolve(domain, 'MX')
-            features['has_mx_response'] = True
-        except Exception:
-            features['has_mx_response'] = False
-
-        # TXT record checks
-        try:
-            txt_records = resolver.resolve(domain, 'TXT')
-            txt_string = "".join(str(record) for record in txt_records)
-            features['has_txt_dns_response'] = True
-            features['has_spf_info'] = "spf" in txt_string.lower()
-            features['has_dkim_info'] = "dkim" in txt_string.lower()
-            features['has_dmarc_info'] = "dmarc" in txt_string.lower()
-        except Exception:
-            features['has_txt_dns_response'] = False
-            features['has_spf_info'] = False
-            features['has_dkim_info'] = False
-            features['has_dmarc_info'] = False
-
-        # Create feature vector matching training data
-        return {
-            'domain_length': features['domain_length'],
-            'domain_entropy': features['domain_entropy'],
-            'numeric_ratio': features['numeric_ratio'],
-            'special_char_ratio': features['special_char_ratio'],
-            'vowel_ratio': features['vowel_ratio'],
-            'consonant_ratio': features['consonant_ratio'],
-            'dns_record_type': features['dns_record_type'],
-            'ip_count': features['ip_count'],
-            'has_mx_response': int(features['has_mx_response']),
-            'has_txt_dns_response': int(features['has_txt_dns_response']),
-            'has_spf_info': int(features['has_spf_info']),
-            'has_dkim_info': int(features['has_dkim_info']),
-            'has_dmarc_info': int(features['has_dmarc_info']),
-            'domain': features['domain']
-        }
-
-    return None
-
-# Regex for parsing the whole log line from coredns
-log_pattern_db = re.compile(
-    r'''
-    ^\[INFO\]\s+
-    (?P<ip>[\d\.]+):(?P<port>\d+)\s+-\s+(?P<query_id>\d+)\s+
-    "(?P<type>\w+)\s+IN\s+(?P<domain>[^\s]+?)\.?\s+(?P<proto>\w+)\s+[^"]*"\s+
-    (?P<rcode>\S+)\s+(?P<flags>[^\s,]+(?:,[^\s,]+)*)\s+ # Handle comma flags
-    \d+\s+(?P<resp_time>[\d\.]+)s
-    ''', re.VERBOSE
-)
-
-@app.post('/logs', status_code=status.HTTP_200_OK)
-async def handle_logs(request: Request):
-    raw_line = None
-    iso_time = None
-    db_row_data = None
-
-    try:
-        data = await request.json()
-
-        if not isinstance(data, list) or not data:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid request format, expected non-empty list of log entries."
+            client = get_client(
+                host=CLICKHOUSE_HOST,
+                port=CLICKHOUSE_PORT,
+                username=CLICKHOUSE_USER,
+                password=CLICKHOUSE_PASSWORD,
+                database=CLICKHOUSE_DATABASE,
+                connect_timeout = 5,
+                send_receive_timeout = 10
             )
-
-        first_entry = data[0]
-        if "log" not in first_entry:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Missing 'log' field in first entry."
-            )
-
-        try:
-            inner_log_json = json.loads(first_entry["log"])
-            raw_line = inner_log_json.get("log", "").strip()
-            iso_time = inner_log_json.get("time")
-        except (json.JSONDecodeError, KeyError, AttributeError, TypeError):
-            raw_line = first_entry.get("log", "")  # Get potential raw string
-            if isinstance(raw_line, str):  # Check if it's a string
-                raw_line = raw_line.strip()
+            client.command('SELECT 1') # Test connection
+            print(f"Successfully connected to ClickHouse on attempt {attempt + 1}.")
+            return True
+        except Exception as e:
+            print(f"[WARN] Connection attempt {attempt + 1}/{max_retries} failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
             else:
-                raw_line = ""
+                print("[ERROR] Failed to connect to ClickHouse.")
+                client = None
+                return False
+    return False
 
-            # Get timestamp from outer 'date' field if possible
-            if "date" in first_entry and isinstance(first_entry["date"], (int, float)):
-                iso_time = datetime.datetime.fromtimestamp(first_entry["date"], tz=datetime.timezone.utc).isoformat()
-            else:
-                iso_time = None
-            print("[WARN] Couldn't parse inner JSON, using raw log field and outer timestamp if available.")
 
-        if not raw_line:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Could not extract raw log line"
-            )
+def load_model():
+    global ml_model, feature_names
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    model_path = os.path.join(current_dir, 'dns_classifier.joblib')
+    try:
+        model_dict = joblib.load(model_path)
+        ml_model = model_dict['model']
+        feature_names = model_dict['features']
+        print("Model loaded successfully.")
+    except Exception as e:
+        print(f"[ERROR] Failed to load model: {e}")
+        ml_model = None
+        feature_names = []
+        return False
 
-        features = extract_features_from_log_string(raw_line)
 
-        if not features:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Could not extract features from log line."
-            )
+async def main():
+    # Load model and connect DB
+    if not load_model(): exit(1)
+    if not connect_clickhouse(): exit(1)
 
-        # Prepare feature vector
-        feature_vector = pd.DataFrame([
-            [features.get(feat, 0) for feat in feature_names]
-        ], columns=feature_names)
+    nc = None
+    js = None
+    psub = None
+    # Connect to NATS and subscribe to logs
+    while True:
+        try:
+            print(f"Connecting to NATS at {NATS_URL}...")
+            nc = await nats.connect(NATS_URL, name="ml-model-processor")
+            js = nc.jetstream()
+            print(f"Connected to NATS: {nc.connected_url.netloc}...")
 
-        # Make prediction
-        prediction = model.predict(feature_vector)[0]
-        probability = model.predict_proba(feature_vector)[0]
-
-        # Add prediction to response
-        features['prediction'] = int(prediction)
-        features['malicious_probability'] = float(probability[1])
-
-        match = log_pattern_db.search(raw_line)
-        if match and iso_time and client:
             try:
-                details = match.groupdict()
-                log_time_obj = datetime.datetime.fromisoformat(iso_time.replace('Z', '+00:00'))
-                db_single_row = (
-                    log_time_obj, ipaddress.ip_address(details['ip']), int(details['port']),
-                    int(details['query_id']), details['type'], details['domain'], details['proto'],
-                    details['rcode'], details['flags'], float(details['resp_time']),
-                    features['prediction'], features['malicious_probability'],
-                    raw_line
-                )
-                db_row_data = [db_single_row]
-            except Exception as db_prep_e:
-                print(f"[WARN] Failed preparing DB data: {db_prep_e}")
-                db_row_data = None
-
-        if db_row_data:
-            write_to_log(db_row_data)
-
-        return features
+                print(f"Ensuring JetStream stream '{NATS_STREAM_NAME}' exists...")
+                await js.add_stream(name=NATS_STREAM_NAME, subjects=[NATS_LOG_SUBJECT])
+            except Exception as e:
+                print(f"[ERROR] Failed to ensure NATS stream exists: {e}")
+                raise # Trigger reconnect loop
 
 
-    except HTTPException:
-        raise
-    except json.JSONDecodeError as json_err:
-        # Handle errors parsing the incoming request JSON
-        print(f"[ERROR] Invalid JSON received in request: {json_err}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid JSON format in request body: {str(json_err)}"
-        )
-    except Exception as e:
-        print(f"[ERROR] Unhandled exception in handle_logs_fastapi: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}"
-        )
+            print(f"Creating/getting durable consumer '{NATS_CONSUMER_NAME}'...")
+            psub = await js.pull_subscribe(
+                subject=NATS_LOG_SUBJECT,
+                durable=NATS_CONSUMER_NAME,
+                config=nats.js.api.ConsumerConfig(ack_policy=nats.js.api.AckPolicy.EXPLICIT)
+            )
+            print(f"Consumer '{NATS_CONSUMER_NAME}' ready.")
+
+            # Trigger batch processing loop
+            while nc.is_connected:
+                db_batch_to_insert = []
+                notifications_to_publish = []
+                processed_msgs_metadata = []  # Keep track of msgs to ack
+
+                try:
+                    # Fetch a batch of messages
+                    # print(f"Fetching batch (size={BATCH_SIZE}, timeout={BATCH_WAIT_TIMEOUT}s)...")
+                    msgs = await psub.fetch(batch=BATCH_SIZE, timeout=BATCH_WAIT_TIMEOUT)
+
+                    if not msgs: continue  # Go back to fetch if no messages
+
+                    # print(f"Received {len(msgs)} messages.")
+                    for msg in msgs:
+                        try:
+                            payload = json.loads(msg.data.decode())
+                            db_tuple, notification_payload = process_log_entry(payload, ml_model, feature_names)
+
+                            if db_tuple:
+                                db_batch_to_insert.append(db_tuple)
+                            if notification_payload:
+                                notifications_to_publish.append(notification_payload)
+
+                            # Add msg to list for ack *after* successful processing attempt
+                            processed_msgs_metadata.append(msg)
+
+                        except json.JSONDecodeError:
+                            print(f"[ERROR] Failed JSON decode")
+                            await msg.nak(delay=5)  # Nak message on decode failure
+                        except Exception as e:
+                            print(f"[ERROR] Failed processing message {e}")
+                            await msg.nak(delay=5)  # Nak message on other processing failure
+
+                    # Insert batch into ClickHouse
+                    if db_batch_to_insert:
+                        write_to_log(db_batch_to_insert, client, CLICKHOUSE_TABLE)
+
+                    # TODO Send notification to Mattermost?
+                    if notifications_to_publish:
+                        for notif_payload in notifications_to_publish:
+                            await nc.publish(NATS_NOTIFY_SUBJECT, json.dumps(notif_payload).encode())
+
+                    # Acknowledge all successfully processed messages in the batch
+                    if processed_msgs_metadata:
+                        ack_tasks = [msg.ack() for msg in processed_msgs_metadata]
+                        await asyncio.gather(*ack_tasks)
+                        print(f"Acked {len(processed_msgs_metadata)} messages.")
+
+
+                except TimeoutError:  # Expected when fetch times out
+                    pass
+                except nats.errors.NoMessagesError:  # Expected when no messages available
+                    pass
+                except Exception as e:
+                    print(f"[ERROR] Error fetching/processing batch: {e}")
+                    await asyncio.sleep(2)  # Delay before retrying fetch
+
+        except (ConnectionClosedError, TimeoutError, NoServersError, OSError) as conn_err:
+            print(f"[ERROR] NATS connection error: {conn_err}. Reconnecting...")
+        except Exception as e:
+            print(f"[ERROR] Unexpected error in main loop: {e}. Reconnecting...")
+        finally:
+            # Clean up connection before retrying
+            if nc and nc.is_connected:
+                await nc.close()
+            nc = None
+            js = None
+            psub = None
+            await asyncio.sleep(5)  # Wait before retrying connection
+
 
 if __name__ == "__main__":
-    print("Starting FastAPI server with Uvicorn...")
-    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=False)
+    print("Starting NATS...")
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nExiting.")

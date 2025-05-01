@@ -1,3 +1,4 @@
+# Use the same Python base image for consistency
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -7,9 +8,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY main.py .
-COPY ml_processing.py .
-COPY dns_classifier.joblib .
+COPY notification.py .
 
-# Run the Flask application
-CMD ["python", "-u", "main.py"]
+# Run the notification service application
+CMD ["python", "-u", "notification.py"]

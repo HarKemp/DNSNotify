@@ -1,0 +1,65 @@
+# vector.toml
+
+# --- Sources ---
+# Collect logs specifically from the coredns container
+[sources.docker_logs]
+  type = "docker_logs"
+  # Only include logs from the container named 'coredns'
+  include_containers = ["coredns"]
+  # Optional: Include labels if needed for more specific targeting
+  # include_labels = [...]
+
+# --- Transforms ---
+
+# 1. Decode the JSON log message if Docker log driver outputs JSON
+#    This assumes the raw CoreDNS log line is nested within a 'log' field
+#    inside the main log message (e.g., {"log": "[INFO]...", "time": "..."})
+[transforms.parse_json]
+  type = "remap"
+  inputs = ["docker_logs"]
+  # Abort on error to prevent processing malformed logs further
+  abort_on_error = true
+  source = '''
+    # Attempt to parse the 'log' field (adjust if your field name is different, e.g., 'message')
+    parsed, err = parse_json(.log)
+    if err != null {
+      # If parsing fails, log an error and drop the event
+      log("Failed to parse inner JSON log field: " + err, level: "error")
+      abort() # Drop the event
+    } else {
+      # If successful, merge the parsed fields (like inner 'log' and 'time')
+      # into the top level event, overwriting the original outer 'log' field.
+      . = merge(., parsed) ?? .
+    }
+  '''
+
+# 2. Filter for relevant CoreDNS log lines based on the *inner* log content
+#    This transform now receives events processed by 'parse_json'
+[transforms.filter_coredns_logs]
+  type = "filter"
+  inputs = ["parse_json"] # Takes input from the previous transform
+  # Abort on error in condition evaluation
+  abort_on_error = true
+  condition = '''
+    # Check the '.log' field (which should now contain the raw CoreDNS line)
+    # Ensure it exists, is a string, and contains the required patterns.
+    exists(.log) && is_string(.log) && contains(.log, "[INFO]") && contains(.log, " A IN ")
+  '''
+
+# --- Sinks ---
+# Send filtered logs to NATS
+[sinks.nats_output]
+  type = "nats"
+  inputs = ["filter_coredns_logs"] # Input from the final filter transform
+
+  # NATS connection details
+  url = "${NATS_URL}" # Read NATS URL from environment variable
+
+  # NATS subject to publish to
+  subject = "${NATS_LOG_SUBJECT}" # Read subject from environment variable
+
+  # Encoding - send the whole event (now containing parsed fields) as JSON
+  encoding.codec = "json"
+
+  # Optional: JetStream specific settings if needed
+  # jetstream.enabled = true
