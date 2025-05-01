@@ -37,3 +37,7 @@
 * Ja tiek mainīta tabulas struktūra, tad ir jāizdzēš clickhouse konteinera volumes
 ```docker compose down -v``` vai ```docker compose down clickhouse -v```
 * Tika izveidots pagaidu konteiners, kas "sūta" (Vēl ir jāveic MatterMost implementācija) brīdinājumus uz MatterMost
+
+
+## Potenciālā sistēmas shēma
+![Alt text](Docs/DNSNotify.drawio.png)

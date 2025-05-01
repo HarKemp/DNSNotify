@@ -1,11 +1,11 @@
 CREATE TABLE IF NOT EXISTS dns_logs
 (
-    log_time      DateTime64(3, 'UTC'),
-    client_ip     Nullable(IPv4),
+    log_time      DateTime64(3, 'Europe/Riga'),
+    client_ip     Nullable(IPv6),
     client_port   Nullable(UInt16),
     query_id      Nullable(UInt64),
     query_type    Nullable(String),
-    domain        Nullable(String),
+    domain        String,
     protocol      Nullable(String),
     response_code Nullable(String),
     flags         Nullable(String),
@@ -15,4 +15,5 @@ CREATE TABLE IF NOT EXISTS dns_logs
     raw_log       String
 )
 ENGINE = MergeTree()
-ORDER BY log_time;
+PARTITION BY toYYYYMM(log_time)
+ORDER BY (log_time, domain);

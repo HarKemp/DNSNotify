@@ -180,7 +180,6 @@ async def main():
         except Exception as e:
             print(f"[ERROR] Unexpected error in main loop: {e}. Reconnecting...")
         finally:
-            # Clean up connection before retrying
             if nc and nc.is_connected:
                 await nc.close()
             nc = None
