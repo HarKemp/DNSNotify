@@ -1,6 +1,6 @@
 # DNSNotify
 
-# Uzstādīšana un izmēģinājums bez datu bāzes
+# Uzstādīšana un izmēģinājums ar datu bāzi
 ## Uzstādīšana
 * Instalē Docker desktop
 * Noklonē DNSNotify repozitoriju
@@ -8,13 +8,15 @@
 ```docker compose up -d --build --remove-orphans```
 
 ## Izmēģinājums
+* Šobrīd tiek veikta automātiska dns pieprasījumu veikšana no test-client konteinera (katras 30 sekundes)
+* Zemāk redzama iespēja to izdarīt manuāli, ja nepieciešams
+### Manuāla DNS pieprasījumu veikšana
 * Vispirms jāizveido savienojums ar konteineru, kas veiks DNS pieprasījumus:
 ```docker compose exec test-client /bin/sh```
 * Izpilda dig komandu 
 ```dig @coredns rtu.lv``` - rtu.lv aizvieto ar jebkuru citu domēnu
-* Tagad ar fastapi starpniecību izveidojas papildu ieraksts clickhouse datubāzē
-* Iziet no konteinera
-```exit```
+* Tagad izveidojas papildu ieraksts clickhouse datubāzē
+### Datu bāzes aplūkošana
 * Atver clickhouse datubāzi
 ```docker compose exec clickhouse clickhouse-client --user default --password default```
 * Izpilda komandu, lai apskatītu tabulu, kurā tagad vajadzētu būt vismaz vienam ierakstam
@@ -24,12 +26,14 @@
 
 
 ## Piezīmes
-* Šobrīd ir uzstādīts fastapi, ja lietojam kaut ko citu, tad tam ir jāstrādā ml-model konteinerī uz 5000 porta un pašus log failus jāpieņem /log subdirektorijā vai arī jāmaina konfigurācija ![agent.conf](Application/fluent-bit/agent.conf) failā
-* Jāmaina būtu arī ports ml-model/Dockerfile un docker-compose.yml failā.
+* Fluent-Bit log failu pārsūtīšanai tagad ir aizvietots ar Vector
+* Log failu saņemšanai no CoreDNS+Vector tagad izmanto NATS - tas log failus ieliek rindā un tos paņem ml-model, kad process nav aizņemts
+* Ar NATS implementāciju FastAPI vai Flask vairs nav vajadzīgs
+* Servisu/konteineru konfigurācija tagad ir pieejama .env failā
 * Coredns šobrīd domēna IP adresi neatgriež
-* Ja tiek mainīta clickhouse saglabātās dns_logs tabulas struktūra (![init.sql](Application/clickhouse/init.sql) failā), tad jāmaina arī konfigurācija ![ml-model/main.py](Application/ml-model/main.py) failā
+* Funkcijas, kas atbild par datu/log apstrādi tagad ir pieejamas ![ml_processing.py](Application/ml-model/ml_processing.py) failā
+* ![main.py](Application/ml-model/main.py) failā ir pieejamas funkcijas, kas izveido savienojumus ar NATS un Clickhouse
+* Ja tiek mainīta clickhouse saglabātās dns_logs tabulas struktūra (![init.sql](Application/clickhouse/init.sql) failā), tad jāmaina arī konfigurācija ![ml-model/main.py](Application/ml-model/ml_processing.py) failā
 * Ja tiek mainīta tabulas struktūra, tad ir jāizdzēš clickhouse konteinera volumes
 ```docker compose down -v``` vai ```docker compose down clickhouse -v```
-* Pagaidām vēl nav izveidots .env fails, bet to vajadzētu izdarīt
-* Iespējams vajadzētu sadalīt fastapi un ml-model funkcionalitāti divos atsevišķos failos, lai viss nebūtu main.py
-* Varbūt pārdomāt kā labāk iestatīt clickhouse/users.xml failu, kad būs izveidots .env fails
+* Tika izveidots pagaidu konteiners, kas "sūta" (Vēl ir jāveic MatterMost implementācija) brīdinājumus uz MatterMost
