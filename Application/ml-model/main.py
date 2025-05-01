@@ -77,6 +77,7 @@ def load_model():
         ml_model = model_dict['model']
         feature_names = model_dict['features']
         print("Model loaded successfully.")
+        return True
     except Exception as e:
         print(f"[ERROR] Failed to load model: {e}")
         ml_model = None
@@ -133,6 +134,7 @@ async def main():
                     for msg in msgs:
                         try:
                             payload = json.loads(msg.data.decode())
+                            print(f"[DEBUG] Received Payload: {payload}") ## TODO: REmove
                             db_tuple, notification_payload = process_log_entry(payload, ml_model, feature_names)
 
                             if db_tuple:
@@ -140,15 +142,14 @@ async def main():
                             if notification_payload:
                                 notifications_to_publish.append(notification_payload)
 
-                            # Add msg to list for ack *after* successful processing attempt
                             processed_msgs_metadata.append(msg)
 
                         except json.JSONDecodeError:
                             print(f"[ERROR] Failed JSON decode")
-                            await msg.nak(delay=5)  # Nak message on decode failure
+                            await msg.nak(delay=5)
                         except Exception as e:
                             print(f"[ERROR] Failed processing message {e}")
-                            await msg.nak(delay=5)  # Nak message on other processing failure
+                            await msg.nak(delay=5)
 
                     # Insert batch into ClickHouse
                     if db_batch_to_insert:

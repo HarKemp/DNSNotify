@@ -10,22 +10,10 @@ services:
     ports:
       - "8153:53/udp"
       - "8153:53/tcp"
+    labels:
+      - "vector.collect.logs=coredns"
     networks:
       - dnsnotify
-
-#  fb-agent:
-#    image: fluent/fluent-bit:latest
-#    container_name: fb-agent
-#    restart: unless-stopped
-#    depends_on:
-#      - coredns
-#      - nats
-#    volumes:
-#      - ./fluent-bit/agent.conf:/fluent-bit/etc/fluent-bit.conf:ro
-#      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-#    command: ["-c", "/fluent-bit/etc/fluent-bit.conf"]
-#    networks:
-#      - dnsnotify
 
   vector:
     image: timberio/vector:latest-alpine
@@ -37,8 +25,7 @@ services:
     volumes:
       - ./vector/vector.toml:/etc/vector/vector.toml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Optional: Mount Docker container log directory if using 'file' source instead
-      # - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: ["--config", "/etc/vector/vector.toml"]
     environment:
       - NATS_URL=${NATS_URL}
       - NATS_LOG_SUBJECT=${NATS_LOG_SUBJECT}
@@ -63,8 +50,8 @@ services:
     restart: unless-stopped
     command: "-js"
     ports:
-      - "4222:4222" # Client port
-      - "8222:8222" # HTTP monitoring
+      - "4222:4222"
+      - "8222:8222"
     networks:
       - dnsnotify
     volumes:

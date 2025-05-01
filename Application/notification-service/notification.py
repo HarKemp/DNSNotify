@@ -35,7 +35,7 @@ def send_mattermost_notification(payload):
         data = json.dumps({'text': message})
 
         response = requests.post(MATTERMOST_WEBHOOK_URL, headers=headers, data=data, timeout=10)
-        response.raise_for_status() # Raise an exception for bad status codes (4xx or 5xx)
+        response.raise_for_status()
 
         print(f"Successfully sent notification for domain: {payload.get('domain')}")
         return True
@@ -57,7 +57,6 @@ async def run_notification_consumer():
                                     reconnect_time_wait=5, max_reconnect_attempts=10)
             print(f"Notification Service: Connected to NATS: {nc.connected_url.netloc}...")
 
-            # Subscribe to the notification subject with a queue group
             sub = await nc.subscribe(NATS_NOTIFY_SUBJECT, queue=NATS_QUEUE_GROUP)
             print(f"Notification Service: Subscribed to '{NATS_NOTIFY_SUBJECT}' with queue group '{NATS_QUEUE_GROUP}'.")
 

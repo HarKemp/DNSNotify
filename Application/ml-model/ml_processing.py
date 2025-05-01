@@ -132,7 +132,7 @@ def extract_features_from_log_string(log_string):
     return None
 
 
-async def process_log_entry(payload, ml_model, feature_names):
+def process_log_entry(payload, ml_model, feature_names):
 
     raw_line = None
     iso_time = None
@@ -140,24 +140,17 @@ async def process_log_entry(payload, ml_model, feature_names):
     notification_payload = None
 
     try:
-        raw_log_field = payload.get("log")
-        if isinstance(raw_log_field, str):
-            try:
-                inner_log_json = json.loads(raw_log_field)
-                raw_line = inner_log_json.get("log", "").strip()
-                iso_time = inner_log_json.get("time")
-            except (json.JSONDecodeError, TypeError):
-                raw_line = raw_log_field.strip()
-                if not iso_time: iso_time = payload.get("time")
-                if not iso_time and "date" in payload and isinstance(payload["date"], (int, float)):
-                    iso_time = datetime.datetime.fromtimestamp(payload["date"], tz=datetime.timezone.utc).isoformat()
-        elif isinstance(raw_log_field, dict) and 'log' in raw_log_field:
-            raw_line = raw_log_field.get("log", "").strip()
-            iso_time = raw_log_field.get("time")
+        raw_line = payload.get("message")
+        iso_time = payload.get("timestamp")
 
-        if not raw_line or not iso_time:
-            print("[ERROR] Invalid log format, skipping current entry.")
+        if not raw_line or not isinstance(raw_line, str):
+            print(f"[ERROR] Invalid log format: Missing or invalid 'message' field. Payload: {str(payload)[:200]}")
             return None, None
+
+        raw_line = raw_line.strip()
+        if not iso_time or not isinstance(iso_time, str):
+            print(f"[WARN] Missing or invalid 'timestamp' field ({type(iso_time)}), using current time.")
+            iso_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
         features = extract_features_from_log_string(raw_line)
         prediction_val = None
@@ -170,8 +163,8 @@ async def process_log_entry(payload, ml_model, feature_names):
             ], columns=feature_names)
 
             # Make prediction
-            prediction = model.predict(feature_vector)[0]
-            probability = model.predict_proba(feature_vector)[0]
+            prediction = ml_model.predict(feature_vector)[0]
+            probability = ml_model.predict_proba(feature_vector)[0]
 
             # Add prediction to response
             prediction_val = int(prediction)
@@ -190,6 +183,7 @@ async def process_log_entry(payload, ml_model, feature_names):
             )
 
             # TODO Define Mattermost notification payload structure?
+            # Temporary implementation of notification payload
             if prediction_val == 1:
                 notification_payload = {
                     "timestamp": log_time_obj.isoformat(),
