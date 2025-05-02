@@ -18,3 +18,4 @@ ctldl.windowsupdate.com
 mc.prod.ads.prod.webservices.mozgcp.net
 accounts.google.com
 ocsp.entrust.net
+youtube.com
