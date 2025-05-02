@@ -89,8 +89,8 @@ services:
       ##TODO tad varbūt grafana-data vietā jāliek ceļš uz lokālu grafana direktoriju nevis jāveido volume.
       - grafana-data:/var/lib/grafana
     environment:
-      - GRAF_ADMIN_USER=${GRAFANA_ADMIN_USER}
-      - GRAF_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
     networks:
       - netw
 
