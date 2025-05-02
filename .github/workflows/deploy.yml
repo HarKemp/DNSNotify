@@ -10,6 +10,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v3
+        with:
+          ref: main
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v0.1.8
