@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS dns_logs
 (
     log_time      DateTime64(3, 'Europe/Riga'),
-    client_ip     Nullable(IPv6),
+    client_ip     Nullable(IPv4),
     client_port   Nullable(UInt16),
     query_id      Nullable(UInt64),
     query_type    Nullable(String),

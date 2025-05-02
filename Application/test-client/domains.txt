@@ -4,3 +4,17 @@ lsm.lv
 github.com
 docker.com
 wikipedia.org
+cloudflare-dns.com
+prod.detectportal.prod.cloudops.mozgcp.net
+latvija.lv
+latvija.gov.lv
+fonts.gstatic.com
+jsdelivr.map.fastly.net
+signaler-pa.clients6.google.com
+docker.hosted-by-discourse.com
+forums.docker.com
+proxy.individual.githubcopilot.com
+ctldl.windowsupdate.com
+mc.prod.ads.prod.webservices.mozgcp.net
+accounts.google.com
+ocsp.entrust.net
