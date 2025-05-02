@@ -75,6 +75,25 @@ services:
     networks:
       - dnsnotify
 
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: grafana
+    restart: unless-stopped
+    depends_on:
+      - clickhouse
+    ports:
+      - "3000:3000"
+    volumes:
+      ##TODO Šo vajag pārdomāt - ja konfigurācijai lieto yaml grafana config failus, tad varbūt var atstāt, kā ir.
+      ##TODO Ja nelieto yaml grafana config failus vai kādu citu automātisko grafana konfigurācijas veidu,
+      ##TODO tad varbūt grafana-data vietā jāliek ceļš uz lokālu grafana direktoriju nevis jāveido volume.
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GRAF_ADMIN_USER=${GRAFANA_ADMIN_USER}
+      - GRAF_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+    networks:
+      - dnsnotify
+
   notification-service:
     build: ./notification-service
     container_name: notification-service
@@ -99,6 +118,7 @@ services:
 volumes:
   clickhouse-data:
   nats-data:
+  grafana-data:
 
 networks:
   dnsnotify:
