@@ -94,14 +94,96 @@ services:
     networks:
       - netw
 
+  postgres:
+    image: postgres:13-alpine
+    container_name: postgres
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      # timezone inside container
+      - TZ
+
+      # necessary Postgres options/variables
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_DB
+    networks:
+      - netw
+
+  mattermost:
+    container_name: mattermost
+    build:
+      context: ./mattermost
+      # Dockerfile for Mattermost server
+      dockerfile: Dockerfile
+    depends_on:
+      - postgres
+    #image: mattermost/mattermost-enterprise-edition:10.5.2
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 200
+    read_only: false
+    tmpfs:
+      - /tmp
+    volumes:
+      - mattermost-data:/mattermost/data:rw
+      - mattermost-data:/mattermost/logs:rw
+      - mattermost-data:/mattermost/config:rw
+      - mattermost-data:/mattermost/plugins:rw
+      - mattermost-data:/mattermost/client/plugins:rw
+      - mattermost-data:/mattermost/bleve-indexes:rw
+      - ./mattermost/mattermost-setup.sh:/opt/mattermost/mattermost-setup.sh:ro
+      - mattermost-config-exchange:/mattermost-config
+    post_start:
+      - command: ["/opt/mattermost/mattermost-setup.sh"]
+        user: root
+    environment:
+      # timezone inside container
+      - TZ
+
+      # necessary Mattermost options/variables
+      - MM_SQLSETTINGS_DRIVERNAME
+      - MM_SQLSETTINGS_DATASOURCE
+
+      # necessary for bleve
+      - MM_BLEVESETTINGS_INDEXDIR
+
+      # additional settings
+      - MM_SERVICESETTINGS_SITEURL
+
+      # Enable local mode
+      - MM_SERVICESETTINGS_ENABLELOCALMODE=${MM_SERVICESETTINGS_ENABLELOCALMODE}
+
+      # Setup script environment variables
+      - SETUP_ADMIN_USERNAME=${MM_ADMIN_USERNAME}
+      - SETUP_ADMIN_PASSWORD=${MM_ADMIN_PASSWORD}
+      - SETUP_ADMIN_EMAIL=${MM_ADMIN_EMAIL}
+      - SETUP_MATTERMOST_URL=${MATTERMOST_BASE_URL}
+    ports:
+      - "8065:8065"
+    networks:
+      - netw
+
   notification-service:
     build: ./notification-service
     container_name: notification-service
     restart: unless-stopped
     depends_on:
       - nats
+      - mattermost
     env_file:
       - .env
+    volumes:
+      - mattermost-config-exchange:/mattermost-config:ro
     networks:
       - netw
 
@@ -119,6 +201,9 @@ volumes:
   clickhouse-data:
   nats-data:
   grafana-data:
+  mattermost-data:
+  mattermost-config-exchange: {}
+  postgres-data:
 
 networks:
   netw:

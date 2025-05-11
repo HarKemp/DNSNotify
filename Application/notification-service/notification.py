@@ -10,15 +10,50 @@ import requests
 NATS_URL = os.getenv('NATS_URL', 'nats://nats:4222')
 NATS_NOTIFY_SUBJECT = os.getenv('NATS_NOTIFY_SUBJECT', 'dns.malicious.notify') # Subject ML service publishes to
 NATS_QUEUE_GROUP = os.getenv('NATS_QUEUE_GROUP', 'notification_group') # Queue group for load balancing
-MATTERMOST_WEBHOOK_URL = os.getenv('MATTERMOST_WEBHOOK_URL') # Get webhook
+
+
+MATTERMOST_WEBHOOK_URL_FILE = os.getenv('MATTERMOST_WEBHOOK_URL_FILE', '/mattermost-config/webhook_url.txt')
+MATTERMOST_INSTANCE_BASE_URL = os.getenv('MATTERMOST_BASE_URL', 'http://mattermost:8065')
+MATTERMOST_WEBHOOK_URL = None # Get webhook
+
+def load_mattermost_webhook_url():
+    global MATTERMOST_WEBHOOK_URL
+        
+    # Always try to load the webhook from file first
+    try:
+        if os.path.exists(MATTERMOST_WEBHOOK_URL_FILE):
+            with open(MATTERMOST_WEBHOOK_URL_FILE, 'r') as f:
+                webhook_id = f.read().strip()
+            
+            if webhook_id:
+                # Construct URL from ID
+                base_url = MATTERMOST_INSTANCE_BASE_URL.rstrip('/')
+                MATTERMOST_WEBHOOK_URL = f"{base_url}/hooks/{webhook_id}"
+            else:
+                print(f"[WARN] Webhook file exists but is empty")
+                MATTERMOST_WEBHOOK_URL = None
+        else:
+            print(f"[ERROR] Webhook file not found: {MATTERMOST_WEBHOOK_URL_FILE}")
+            MATTERMOST_WEBHOOK_URL = None
+            
+    except Exception as e:
+        print(f"[ERROR] Failed to load webhook: {e}")
+        MATTERMOST_WEBHOOK_URL = None
+        
+#load_mattermost_webhook_url() # Can try to load on startup - sh script has an internal sleep + notification service is dependent on mattermost service
+
 
 shutdown_event = asyncio.Event()
 
 def send_mattermost_notification(payload):
+    if(MATTERMOST_WEBHOOK_URL is None):
+        load_mattermost_webhook_url() # Checks file for webhook URL
+    
+    # In case somehow URL is not available
     if not MATTERMOST_WEBHOOK_URL:
-        print("[ERROR] MATTERMOST_WEBHOOK_URL not set. Cannot send notification.")
+        print(f"[ERROR] Mattermost webhook URL is not available. Cannot send notification for domain: {payload.get('domain')}")
         return False
-
+    
     try:
         message = (
             f"🚨 **Malicious DNS Query Detected** 🚨\n"
