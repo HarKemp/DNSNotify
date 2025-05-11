@@ -10,6 +10,7 @@
 ```docker network create netw```
 * No DNSNotify\Application mapes izpilda komandu:
 ```docker compose up -d --build --remove-orphans```
+  * Ja izpildes laikā parādās ziņojums "mattermost hook exited with status 255", tad ir nepieciešams mainīt Application/mattermost/mattermost-setup.sh failu no CRLF uz LF
 ### 1.2 Uzstādīšana pietuvināti reālajai videi
 * Šeit tiks lokāli uzstādīti tikai coredns, vector un test-client konteineri un izveidots savienojums ar centrālu serveri, kurā jau darbojas visi pārējie servisi
 * Šajā implementācijā nebūs tieša pieeja clickhouse datubāzei, bet būs pieejama grafana apmeklējot lapu - visual.harak.lat
@@ -69,6 +70,13 @@
 * Šī informācija ir izmaināma .env failā
 * Tālāk ir jāizveido savienojums ar clickhouse datubāzi (savienošanas informācija ir pieejama .env failā)
 * Jāizveido dashboards un jāpievieno vizualizācijas (Ja tie jau nav izveidoti)
+
+## 4. Mattermost paziņojumu aplūkošana
+* Mattermost datubāzei var piekļūt, izmantojot admin lietotāju
+* Lokālai piekļuvei tiek izmantots http://localhost:8065
+* Lietotājvārds - admin
+* Parole - SuperDrosaMattermostParole!
+* Paziņojumu kanālu var atrast, izmantojot **Add Channels -> Browser Channels**
 
 ## Piezīmes
 * Coredns šobrīd domēna IP adresi neatgriež
