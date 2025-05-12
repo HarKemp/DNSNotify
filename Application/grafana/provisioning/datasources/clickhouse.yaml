@@ -4,7 +4,6 @@ datasources:
   - name: ClickHouse
     uid: ael9uo16mu7lsd
     type: grafana-clickhouse-datasource
-    url: http://clickhouse:8123
     access: proxy
     isDefault: true
     editable: false
@@ -12,7 +11,7 @@ datasources:
     jsonData:
       server: clickhouse
       port: 9000
-      protocol: http
+      protocol: native
       defaultDatabase: default
       username: default
       tlsSkipVerify: true
