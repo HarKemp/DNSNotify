@@ -1,9 +1,0 @@
-#!/bin/sh
-set -e
-cd /mattermost
-
-chown -R 2000:2000 /mattermost-config 2>/dev/null || true
-
-gosu mattermost /opt/mattermost/mattermost-setup.sh || true
-
-exec gosu mattermost /mattermost/bin/mattermost
