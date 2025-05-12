@@ -87,7 +87,8 @@ services:
       ##TODO Šo vajag pārdomāt - ja konfigurācijai lieto yaml grafana config failus, tad varbūt var atstāt, kā ir.
       ##TODO Ja nelieto yaml grafana config failus vai kādu citu automātisko grafana konfigurācijas veidu,
       ##TODO tad varbūt grafana-data vietā jāliek ceļš uz lokālu grafana direktoriju nevis jāveido volume.
-      - ./grafana:/etc/grafana/provisioning/dashboards
+      - ./grafana/dashboard:/etc/grafana/provisioning/dashboards
+      - ./grafana/provisioning:/etc/grafana/provisioning
       - grafana-data:/var/lib/grafana
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
