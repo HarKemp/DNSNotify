@@ -15,5 +15,5 @@ datasources:
       defaultDatabase: default
       username: default
       tlsSkipVerify: true
-      secureJsonData:
+    secureJsonData:
         password: default
