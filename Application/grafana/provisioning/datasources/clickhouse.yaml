@@ -8,5 +8,13 @@ datasources:
     access: proxy
     isDefault: true
     editable: false
+
     jsonData:
+      server: clickhouse
+      port: 9000
+      protocol: http
       defaultDatabase: default
+      username: default
+      tlsSkipVerify: true
+      secureJsonData:
+        password: default
