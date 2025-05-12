@@ -116,6 +116,11 @@ services:
       - POSTGRES_USER
       - POSTGRES_PASSWORD
       - POSTGRES_DB
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h localhost" ]
+      interval: 45s
+      timeout: 45s
+      retries: 1
     networks:
       - netw
 
@@ -126,7 +131,8 @@ services:
       # Dockerfile for Mattermost server
       dockerfile: Dockerfile
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     #image: mattermost/mattermost-enterprise-edition:10.5.2
     restart: unless-stopped
     security_opt:
@@ -147,6 +153,8 @@ services:
     post_start:
       - command: ["/opt/mattermost/mattermost-setup.sh"]
         user: root
+
+      # ------------------------------------
     environment:
       # timezone inside container
       - TZ

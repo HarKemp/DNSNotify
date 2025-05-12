@@ -112,13 +112,13 @@ if [ "$CHANNEL_EXISTS_IN_LIST" = false ] && [ -z "$TARGET_CHANNEL_ID" ]; then
   echo "Attempting to create channel '${CHANNEL_NAME}' in team '${TEAM_NAME}'..."
   CREATE_CHANNEL_OUTPUT=$($MMCTL_CMD channel create --team "${TEAM_NAME}" --name "${CHANNEL_NAME}" --display_name "${CHANNEL_DISPLAY_NAME}" 2>&1)
   MMCTL_CHANNEL_CREATE_EXIT_CODE=$?
-  
+
   if [ $MMCTL_CHANNEL_CREATE_EXIT_CODE -eq 0 ]; then
     echo "Channel created, now searching for its ID..."
     # After creating the channel, directly search for it to get the ID
     SEARCH_CHANNEL_OUTPUT=$($MMCTL_CMD channel search "${CHANNEL_NAME}" --team "${TEAM_NAME}" 2>&1)
     TARGET_CHANNEL_ID=$(echo "$SEARCH_CHANNEL_OUTPUT" | grep -i "Channel ID :" | awk -F':' '{print $NF}' | tr -d ' \r\n')
-    
+
     if [ -n "$TARGET_CHANNEL_ID" ]; then
       echo "Found channel ID: $TARGET_CHANNEL_ID"
     else
@@ -185,7 +185,7 @@ if [ -z "$HOOK_ID" ]; then
             echo "Trying to search for channel ID one more time..."
             SEARCH_CHANNEL_OUTPUT=$($MMCTL_CMD channel search "${CHANNEL_NAME}" --team "${TEAM_NAME}" 2>&1)
             TARGET_CHANNEL_ID=$(echo "$SEARCH_CHANNEL_OUTPUT" | grep -i "Channel ID :" | awk -F':' '{print $NF}' | tr -d ' \r\n')
-            
+
             if [ -n "$TARGET_CHANNEL_ID" ]; then
                 echo "Finally found channel ID: $TARGET_CHANNEL_ID"
             else
@@ -197,7 +197,7 @@ if [ -z "$HOOK_ID" ]; then
             exit 1
         fi
     fi
-    
+
     echo "Attempting to create a new webhook..."
     WEBHOOK_CREATED_RAW_OUTPUT=$($MMCTL_CMD webhook create-incoming \
       --channel "${TEAM_NAME}:${CHANNEL_NAME}" \
