@@ -150,11 +150,8 @@ services:
       - mattermost-data:/mattermost/bleve-indexes:rw
       - ./mattermost/mattermost-setup.sh:/opt/mattermost/mattermost-setup.sh:ro
       - mattermost-config-exchange:/mattermost-config
-    post_start:
-      - command: ["/opt/mattermost/mattermost-setup.sh"]
-        user: root
 
-      # ------------------------------------
+    # ------------------------------------
     environment:
       # timezone inside container
       - TZ
