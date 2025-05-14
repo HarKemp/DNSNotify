@@ -5,6 +5,45 @@ import json
 import datetime
 import ipaddress
 import pandas as pd
+import re
+# IPv4 (strict: each octet 0?255)
+ipv4_re = re.compile(r'''
+    \b
+    (?:(?:25[0-5]      # 250?255
+      |2[0-4]\d        # 200?249
+      |1?\d?\d         #   0?199
+    )\.){3}
+    (?:25[0-5]         # last octet 250?255
+      |2[0-4]\d        #       200?249
+      |1?\d?\d         #       0?199
+    )
+    \b
+''', re.VERBOSE)
+
+# A reasonably?complete IPv6 (full & compressed forms)
+ipv6_re = re.compile(r'''
+    \[?                                  # optional [ for URLs
+    (?:                                  # one of:
+      (?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}            # 1:2:3:4:5:6:7:8
+    | (?:[0-9A-Fa-f]{1,4}:){1,7}:                       # 1::                              1:2:3:4:5:6:7::
+    | (?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}        # 1::8             1:2:3:4:5:6::8
+    | (?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}# 1::7:8           1:2:3:4:5::7:8
+    | (?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}# 1::6:7:8         1:2:3:4::6:7:8
+    | (?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}# 1::5:6:7:8       1:2:3::5:6:7:8
+    | (?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}# 1::4:5:6:7:8     1:2::4:5:6:7:8
+    |  [0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})     # 1::3:4:5:6:7:8   1::2:3:4:5:6:7:8
+    |  :(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)                   # ::2:3:4:5:6:7:8  ::  
+    )
+    \]?                                  # optional ]
+''', re.VERBOSE)
+def is_ip_address(host) -> bool:
+    # if your input might include a URL, first pull out the host/port:
+    from urllib.parse import urlparse
+    p = urlparse(host)
+    host = p.netloc or p.path  # if it's just a bare string, it'll end up in .path
+    # strip off any port
+    host = host.split(':')[0]
+    return bool(ipv4_re.fullmatch(host) or ipv6_re.fullmatch(host))
 
 
 # Regex for parsing the whole log line from coredns
@@ -41,7 +80,16 @@ def write_to_log(rows_to_insert, client, table_name):
             'response_time',      # Float
             'prediction',         # Int
             'malicious_probability', # Float
-            'raw_log'             # String
+            'raw_log',            # String
+            # 'subdomain_count',    # Int
+            # 'digit_count',        # Int
+            # 'unique_digits',      # Int
+            # 'hex_chars',          # Int
+            # 'underscore_count',   # Int
+            # 'consonant_sequence', # Float
+            # 'digit_hex_ratio',    # Float
+            # 'repeated_chars',     # Int
+            # 'consecutive_digits'  # Int
         ]
         client.insert(table_name, rows_to_insert, column_names=column_names)
     except Exception as e:
@@ -64,6 +112,33 @@ def extract_features_from_log_string(log_string):
         # Basic domain features
         features['domain_length'] = len(domain)
         features['domain_entropy'] = calculate_entropy(domain)
+        
+        # New advanced features
+        domain_parts = domain.split('.')
+        features['subdomain_count'] = len(domain_parts) - 2 if len(domain_parts) > 2 else 0
+        
+        # Digit analysis
+        digits = [c for c in domain if c.isdigit()]
+        features['digit_count'] = len(digits)
+        features['unique_digits'] = len(set(digits))
+        
+        # Hex and special character analysis
+        features['hex_chars'] = len([c for c in domain.lower() if c in '0123456789abcdef'])
+        features['underscore_count'] = domain.count('_')
+        
+        # Character sequence analysis
+        consonants = ''.join(c for c in domain.lower() if c in 'bcdfghjklmnpqrstvwxyz')
+        features['consonant_sequence'] = max([len(s) for s in consonants.split('aeiou')]) if consonants else 0
+        
+        # Ratio calculations
+        features['digit_hex_ratio'] = features['hex_chars'] / len(domain) if len(domain) > 0 else 0
+        
+        # Pattern analysis
+        char_counts = {c: domain.count(c) for c in set(domain)}
+        features['repeated_chars'] = sum(1 for c, count in char_counts.items() if count > 1)
+        
+        # Consecutive digits
+        features['consecutive_digits'] = max([len(s) for s in re.findall(r'\d+', domain)]) if re.findall(r'\d+', domain) else 0
 
         # Character-based features
         domain_lower = domain.lower()
@@ -73,7 +148,7 @@ def extract_features_from_log_string(log_string):
         features['special_char_ratio'] = sum(not c.isalnum() for c in domain) / total_length
         features['vowel_ratio'] = sum(c in 'aeiou' for c in domain_lower) / total_length
         features['consonant_ratio'] = sum(c in 'bcdfghjklmnpqrstvwxyz' for c in domain_lower) / total_length
-
+        features['is_ip'] = is_ip_address(domain)
         # DNS features with timeout
         resolver = dns.resolver.Resolver()
         resolver.timeout = 1
@@ -120,12 +195,22 @@ def extract_features_from_log_string(log_string):
             'vowel_ratio': features['vowel_ratio'],
             'consonant_ratio': features['consonant_ratio'],
             'dns_record_type': features['dns_record_type'],
+            'is_ip': features['is_ip'],
             'ip_count': features['ip_count'],
             'has_mx_response': int(features['has_mx_response']),
             'has_txt_dns_response': int(features['has_txt_dns_response']),
             'has_spf_info': int(features['has_spf_info']),
             'has_dkim_info': int(features['has_dkim_info']),
             'has_dmarc_info': int(features['has_dmarc_info']),
+            'subdomain_count': features['subdomain_count'],
+            'digit_count': features['digit_count'],
+            'unique_digits': features['unique_digits'],
+            'hex_chars': features['hex_chars'],
+            'underscore_count': features['underscore_count'],
+            'consonant_sequence': features['consonant_sequence'],
+            'digit_hex_ratio': features['digit_hex_ratio'],
+            'repeated_chars': features['repeated_chars'],
+            'consecutive_digits': features['consecutive_digits'],
             'domain': features['domain']
         }
 
@@ -174,16 +259,16 @@ def process_log_entry(payload, ml_model, feature_names):
         if match:
             details = match.groupdict()
             log_time_obj = datetime.datetime.fromisoformat(iso_time.replace('Z', '+00:00'))
+            
+            # Get features for the new columns, with defaults if missing
+            feature_values = features if features else {}
             db_data_tuple = (
                 log_time_obj, ipaddress.ip_address(details['ip']), int(details['port']),
                 int(details['query_id']), details['type'], details['domain'], details['proto'],
                 details['rcode'], details['flags'], float(details['resp_time']),
-                prediction_val, probability_val,
-                raw_line
+                prediction_val, probability_val, raw_line,
             )
 
-            # TODO Define Mattermost notification payload structure?
-            # Temporary implementation of notification payload
             if prediction_val == 1:
                 notification_payload = {
                     "timestamp": log_time_obj.isoformat(),

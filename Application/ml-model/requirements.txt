@@ -5,3 +5,4 @@ scikit-learn
 dnspython
 clickhouse-connect
 nats-py
+tldextract
