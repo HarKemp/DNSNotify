@@ -111,7 +111,7 @@ services:
   postgres:
     image: postgres:13-alpine
     security_opt: ["no-new-privileges:true"]
-    read_only: true
+#    read_only: true
     tmpfs:
       - /tmp
       - /var/run/postgresql
@@ -151,10 +151,11 @@ services:
       - mattermost-data:/mattermost/bleve-indexes
       - ./mattermost/mattermost-setup.sh:/opt/mattermost/mattermost-setup.sh:ro
       - mattermost-config-exchange:/mattermost-config
+    env_file: .env
     environment:
       - TZ
       - MM_SQLSETTINGS_DRIVERNAME
-      - MM_SQLSETTINGS_DATASOURCE
+      - MM_SQLSETTINGS_DATASOURCE=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable&connect_timeout=10
       - MM_BLEVESETTINGS_INDEXDIR
       - MM_SERVICESETTINGS_SITEURL
       - MM_SERVICESETTINGS_ENABLELOCALMODE=${MM_SERVICESETTINGS_ENABLELOCALMODE}
