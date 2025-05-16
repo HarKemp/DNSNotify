@@ -1,0 +1,38 @@
+services:
+  coredns:
+    image: coredns/coredns:latest
+    container_name: coredns
+    restart: unless-stopped
+    command: -conf /etc/coredns/Corefile
+    volumes:
+      - ./coredns/Corefile:/etc/coredns/Corefile:ro
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+      # Alternative if port 53 is taken (Harder to set up on windows)
+      # - "5353:53/udp"
+      # - "5353:53/tcp"
+    labels:
+      - "vector.collect.logs=coredns"
+    networks:
+      - netw_local
+
+  vector:
+    image: timberio/vector:latest-alpine
+    container_name: vector-agent
+    restart: unless-stopped
+    depends_on:
+      - coredns
+    volumes:
+      - ./vector/vector.toml:/etc/vector/vector.toml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: ["--config", "/etc/vector/vector.toml"]
+    environment:
+      - NATS_URL=${REMOTE_NATS_URL}
+      - NATS_LOG_SUBJECT=${NATS_LOG_SUBJECT}
+    networks:
+      - netw_local
+
+networks:
+  netw:
+    driver: bridge

@@ -57,6 +57,10 @@ log_pattern_db = re.compile(
     ''', re.VERBOSE
 )
 
+def extract_domain(log_string):
+    m = re.search(r'"(?:[A-Z]+) IN (?:https?://)?([a-z0-9.-]+\.[a-z0-9-]+\.?)', log_string)
+    return m.group(1).rstrip('.').lower() if m else None
+
 def calculate_entropy(s):
     probabilities = [float(s.count(c)) / len(s) for c in dict.fromkeys(list(s))]
     return -sum([p * math.log(p, 2) for p in probabilities if p > 0])
@@ -80,7 +84,8 @@ def write_to_log(rows_to_insert, client, table_name):
             'response_time',      # Float
             'prediction',         # Int
             'malicious_probability', # Float
-            'raw_log',            # String
+            'source',
+            'raw_log'            # String
             # 'subdomain_count',    # Int
             # 'digit_count',        # Int
             # 'unique_digits',      # Int
@@ -217,7 +222,7 @@ def extract_features_from_log_string(log_string):
     return None
 
 
-def process_log_entry(payload, ml_model, feature_names):
+def process_log_entry(payload, ml_model, feature_names, allowlist):
 
     raw_line = None
     iso_time = None
@@ -233,6 +238,14 @@ def process_log_entry(payload, ml_model, feature_names):
             return None, None
 
         raw_line = raw_line.strip()
+
+        domain = extract_domain(raw_line)
+        if domain and domain in allowlist:
+            prediction_val, probability_val = 0, 0.0
+            allowlisted = True
+        else:
+            allowlisted = False
+
         if not iso_time or not isinstance(iso_time, str):
             print(f"[WARN] Missing or invalid 'timestamp' field ({type(iso_time)}), using current time.")
             iso_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -241,7 +254,7 @@ def process_log_entry(payload, ml_model, feature_names):
         prediction_val = None
         probability_val = None
 
-        if features and ml_model and feature_names:
+        if not allowlisted and features and ml_model and feature_names:
             # Prepare feature vector
             feature_vector = pd.DataFrame([
                 [features.get(feat, 0) for feat in feature_names]
@@ -263,13 +276,13 @@ def process_log_entry(payload, ml_model, feature_names):
             # Get features for the new columns, with defaults if missing
             feature_values = features if features else {}
             db_data_tuple = (
-                log_time_obj, ipaddress.ip_address(details['ip']), int(details['port']),
+                log_time_obj, details['ip'], int(details['port']),
                 int(details['query_id']), details['type'], details['domain'], details['proto'],
                 details['rcode'], details['flags'], float(details['resp_time']),
-                prediction_val, probability_val, raw_line,
+                prediction_val, probability_val, 'allowlist' if allowlisted else 'model', raw_line,
             )
 
-            if prediction_val == 1:
+            if prediction_val == 1 and not allowlisted:
                 notification_payload = {
                     "timestamp": log_time_obj.isoformat(),
                     "client_ip": details['ip'], "query_type": details['type'],

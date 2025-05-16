@@ -20,9 +20,13 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd ~/DNSNotify/
+            set -e
+            echo "Updating repo ..."
+            cd ~/DNSNotify
             git pull origin main
-            cd ~/DNSNotify/Application/
-            docker compose down
-            docker compose pull
-            docker compose up -d --build --remove-orphans
+
+            echo "Running deploy script ..."
+            cd ~/DNSNotify/Application
+            ./deploy.sh
+
+            echo "Deploy finished"

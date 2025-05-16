@@ -1,109 +1,116 @@
-services:
+version: "3.8"
 
+services:
   coredns:
     image: coredns/coredns:latest
-    container_name: coredns
-    restart: unless-stopped
     command: -conf /etc/coredns/Corefile
     volumes:
       - ./coredns/Corefile:/etc/coredns/Corefile:ro
     ports:
-      - "53:53/udp"
-      - "53:53/tcp"
+      - target: 53
+        published: 53
+        protocol: udp
+        mode: host
+      - target: 53
+        published: 53
+        protocol: tcp
+        mode: host
     labels:
       - "vector.collect.logs=coredns"
-    networks:
-      - netw
+    networks: [netw]
+    deploy:
+      restart_policy: { condition: on-failure }
 
   vector:
     image: timberio/vector:latest-alpine
-    container_name: vector-agent
-    restart: unless-stopped
-    depends_on:
-      - coredns
-      - nats
-    volumes:
-      - ./vector/vector.toml:/etc/vector/vector.toml:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     command: ["--config", "/etc/vector/vector.toml"]
+    env_file: .env
     environment:
       - NATS_URL=${NATS_URL}
       - NATS_LOG_SUBJECT=${NATS_LOG_SUBJECT}
-    networks:
-      - netw
+    volumes:
+      - ./vector/vector.toml:/etc/vector/vector.toml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [netw]
+    deploy:
+      restart_policy: { condition: on-failure }
 
   ml-model:
     build: ./ml-model
-    container_name: ml-model
-    restart: unless-stopped
-    depends_on:
-      - nats
-      - clickhouse
-    env_file:
-      - .env
+    image: ml-model:latest
+    env_file: .env
     volumes:
       - ./config/allowlist.txt:/config/allowlist.txt:ro
-    networks:
-      - netw
+    networks: [netw]
+    deploy:
+      replicas: 3
+      update_config:
+        order: start-first
+        parallelism: 1
+      restart_policy: { condition: on-failure }
 
   nats:
     image: nats:latest
-    container_name: nats
-    restart: unless-stopped
     command: "-js"
     ports:
-      - "4222:4222"
-      - "8222:8222"
-    networks:
-      - netw
+      - target: 4222
+        published: 4222
+        protocol: tcp
+      - target: 8222
+        published: 8222
+        protocol: tcp
     volumes:
       - nats-data:/data
+    networks: [netw]
+    deploy:
+      restart_policy: { condition: on-failure }
 
   clickhouse:
     image: clickhouse/clickhouse-server:latest
-    container_name: clickhouse
-    restart: unless-stopped
-    ports:
-      - "8123:8123"
-      - "9000:9000"
+    env_file: .env
     environment:
       - CLICKHOUSE_USER=${CLICKHOUSE_USER}
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
       - CLICKHOUSE_DB=${CLICKHOUSE_DATABASE}
+    ports:
+      - target: 8123
+        published: 8123
+        protocol: tcp
+        mode: host
+      - target: 9000
+        published: 9000
+        protocol: tcp
+        mode: host
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - ./clickhouse:/docker-entrypoint-initdb.d
-#      - ./clickhouse/users.xml:/etc/clickhouse-server/users.d/default-password.xml:ro
-    networks:
-      - netw
+    networks: [netw]
+    deploy:
+      restart_policy: { condition: on-failure }
 
   grafana:
     image: grafana/grafana-oss:latest
-    container_name: grafana
-    restart: unless-stopped
-    depends_on:
-      - clickhouse
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./grafana/dashboard:/etc/grafana/provisioning/dashboards
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - grafana-data:/var/lib/grafana
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
       - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
       - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=grafana-clickhouse-datasource
-    networks:
-      - netw
+    ports:
+      - target: 3000
+        published: 3000
+        protocol: tcp
+        mode: host
+    volumes:
+      - ./grafana/dashboard:/etc/grafana/provisioning/dashboards
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    networks: [netw]
+    deploy:
+      restart_policy: { condition: on-failure }
 
   postgres:
     image: postgres:13-alpine
-    container_name: postgres
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 100
+    security_opt: ["no-new-privileges:true"]
     read_only: true
     tmpfs:
       - /tmp
@@ -111,109 +118,87 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:
-      # timezone inside container
       - TZ
-
-      # necessary Postgres options/variables
       - POSTGRES_USER
       - POSTGRES_PASSWORD
       - POSTGRES_DB
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h localhost" ]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h localhost"]
       interval: 45s
       timeout: 45s
       retries: 1
-    networks:
-      - netw
+    networks: [netw]
+    deploy:
+      restart_policy: { condition: on-failure }
 
   mattermost:
-    container_name: mattermost
     build:
       context: ./mattermost
-      # Dockerfile for Mattermost server
       dockerfile: Dockerfile
-    depends_on:
-      postgres:
-        condition: service_healthy
-    #image: mattermost/mattermost-enterprise-edition:10.5.2
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 200
+    image: mattermost:latest
+    depends_on: [postgres]
+    command: >
+      sh -c "wait-for postgres:5432 -t 60 -- /opt/mattermost/bin/mattermost"
+    security_opt: ["no-new-privileges:true"]
     read_only: false
-    tmpfs:
-      - /tmp
+    tmpfs: [ /tmp ]
     volumes:
-      - mattermost-data:/mattermost/data:rw
-      - mattermost-data:/mattermost/logs:rw
-      - mattermost-data:/mattermost/config:rw
-      - mattermost-data:/mattermost/plugins:rw
-      - mattermost-data:/mattermost/client/plugins:rw
-      - mattermost-data:/mattermost/bleve-indexes:rw
+      - mattermost-data:/mattermost/data
+      - mattermost-data:/mattermost/logs
+      - mattermost-data:/mattermost/config
+      - mattermost-data:/mattermost/plugins
+      - mattermost-data:/mattermost/client/plugins
+      - mattermost-data:/mattermost/bleve-indexes
       - ./mattermost/mattermost-setup.sh:/opt/mattermost/mattermost-setup.sh:ro
       - mattermost-config-exchange:/mattermost-config
-
-    # ------------------------------------
     environment:
-      # timezone inside container
       - TZ
-
-      # necessary Mattermost options/variables
       - MM_SQLSETTINGS_DRIVERNAME
       - MM_SQLSETTINGS_DATASOURCE
-
-      # necessary for bleve
       - MM_BLEVESETTINGS_INDEXDIR
-
-      # additional settings
       - MM_SERVICESETTINGS_SITEURL
-
-      # Enable local mode
       - MM_SERVICESETTINGS_ENABLELOCALMODE=${MM_SERVICESETTINGS_ENABLELOCALMODE}
-
-      # Setup script environment variables
       - SETUP_ADMIN_USERNAME=${MM_ADMIN_USERNAME}
       - SETUP_ADMIN_PASSWORD=${MM_ADMIN_PASSWORD}
       - SETUP_ADMIN_EMAIL=${MM_ADMIN_EMAIL}
       - SETUP_MATTERMOST_URL=${MATTERMOST_BASE_URL}
-
       - MM_PLUGINSETTINGS_ENABLEUPLOADS=false
       - MM_PLUGINSETTINGS_AUTOMATICPREPACKAGEDPLUGINS=false
     ports:
-      - "8065:8065"
-    networks:
-      - netw
+      - target: 8065
+        published: 8065
+        protocol: tcp
+        mode: host
+    networks: [netw]
+    deploy:
+      restart_policy: { condition: on-failure }
 
   notification-service:
     build: ./notification-service
-    container_name: notification-service
-    restart: unless-stopped
-    depends_on:
-      - nats
-      - mattermost
-    env_file:
-      - .env
+    image: notification-service:latest
+    env_file: .env
     volumes:
       - mattermost-config-exchange:/mattermost-config:ro
-    networks:
-      - netw
+    networks: [netw]
+    depends_on: [nats, mattermost]
+    deploy:
+      restart_policy: { condition: on-failure }
 
   test-client:
     build: ./test-client
-    container_name: test-client
+    image: test-client:latest
     stdin_open: true
     tty: true
-    depends_on:
-      - coredns
-    networks:
-      - netw
+    networks: [netw]
+    deploy:
+      restart_policy: { condition: none }
 
 volumes:
   clickhouse-data:
   nats-data:
   grafana-data:
   mattermost-data:
-  mattermost-config-exchange: {}
+  mattermost-config-exchange:
   postgres-data:
 
 networks:

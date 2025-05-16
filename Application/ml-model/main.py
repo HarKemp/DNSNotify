@@ -31,6 +31,17 @@ CLICKHOUSE_TABLE = 'dns_logs'
 CLICKHOUSE_RECONNECT_RETRIES = 6
 CLICKHOUSE_RETRY_DELAY = 3
 
+ALLOWLIST_PATH = os.getenv("ALLOWLIST_PATH", "/config/allowlist.txt")
+
+def _load_allowlist():
+    try:
+        with open(ALLOWLIST_PATH) as f:
+            return {l.strip().lower() for l in f if l.strip()}
+    except FileNotFoundError:
+        return set()
+
+allowlist = _load_allowlist()
+allowlist_mtime = os.path.getmtime(ALLOWLIST_PATH) if os.path.exists(ALLOWLIST_PATH) else 0
 
 client = None
 ml_model = None
@@ -135,7 +146,16 @@ async def main():
                         try:
                             payload = json.loads(msg.data.decode())
                             print(f"[DEBUG] Received Payload: {payload}") ## TODO: REmove
-                            db_tuple, notification_payload = process_log_entry(payload, ml_model, feature_names)
+                            global allowlist, allowlist_mtime
+                            try:
+                                cur_mtime = os.path.getmtime(ALLOWLIST_PATH)
+                                if cur_mtime != allowlist_mtime:
+                                    allowlist = _load_allowlist()
+                                    allowlist_mtime = cur_mtime
+                                    print(f"[INFO] Reloaded allow‑list: {len(allowlist)} domains")
+                            except FileNotFoundError:
+                                pass
+                            db_tuple, notification_payload = process_log_entry(payload, ml_model, feature_names, allowlist)
 
                             if db_tuple:
                                 db_batch_to_insert.append(db_tuple)
@@ -155,7 +175,7 @@ async def main():
                     if db_batch_to_insert:
                         write_to_log(db_batch_to_insert, client, CLICKHOUSE_TABLE)
 
-                    # TODO Send notification to Mattermost?
+                    # Send notification to Mattermost
                     if notifications_to_publish:
                         for notif_payload in notifications_to_publish:
                             await nc.publish(NATS_NOTIFY_SUBJECT, json.dumps(notif_payload).encode())

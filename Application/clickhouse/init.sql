@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS dns_logs
 (
     log_time      DateTime64(3, 'Europe/Riga'),
-    client_ip     Nullable(IPv4),
+    client_ip     String,
     client_port   Nullable(UInt16),
     query_id      Nullable(UInt64),
     query_type    Nullable(String),
@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS dns_logs
     response_time Nullable(Float64),
     prediction            Nullable(Int8),
     malicious_probability Nullable(Float64),
+    source Enum8('model' = 1, 'allowlist' = 2) DEFAULT 'model',
     raw_log       String
 )
 ENGINE = MergeTree()
