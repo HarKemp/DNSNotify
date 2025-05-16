@@ -27,6 +27,6 @@ jobs:
 
             echo "Running deploy script ..."
             cd ~/DNSNotify/Application
-            ./deploy.sh
+            bash deploy.sh
 
             echo "Deploy finished"
