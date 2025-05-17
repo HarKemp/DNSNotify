@@ -19,7 +19,14 @@
 ```docker compose -f local.yml up -d --build --remove-orphans```
 * Kad vajadzēs izslēgt, tad jāizpilda komanda:
 ```docker compose -f local.yml down```
-
+### 1.3. Uzstādīšana ar docker swarm
+* Swarm konfigurācija tiks ņemta no prod.yml faila
+* Izpilda komandu ```docker swarm init```
+* Izpilda komandu ```docker network create --driver overlay --attachable netw```
+* Palaiž visus swarm servisus - ```./deploy.ps1```
+* Kad vajag izslēgt - ```./stop-stack.ps1```
+* Ja vajag izslēgt un izdzēst visus volumes - ```./purge-stack.ps1``` - ja parādās kļūdas, tad izpildīt vēlreiz līdz brīdim, kad saka "Purge complete"
+* Ja gadījumā kas, tad var apturēt arī izmantojot ```docker stack rm dnsnotify```
 
 ## 2. Izmēģinājums
 * Šobrīd automātiski tiek veikta automātiska dns pieprasījumu veikšana no test-client konteinera (katras 30 sekundes)
@@ -103,6 +110,11 @@
 * Lai to novērstu visdrīzāk būtu jāpārvieto coredns un vector implementācija uz citu serveri un uz datora tikai jāiestata dns servera IP adrese (Lai gan arī šajā gadījumā IP adreses drošvien uzrādītos kā 198.168...)
 * Taču tas vairāk pietuvotos reālai videi
 * Protams šos vector un coredns konteinerus var palaist arī uz tā paša servera, kur ir clickhouse, nats un pārējie servisi, bet tad sliktāka mērogojamība
+* ==================== (Pievienots 17.05.2025) ====================
+* Tagad ir pieejams arī publisks dns serveris, kas ir piesaistīts pie primārā harak.lat servera
+* Tas darbojas uz amazon virtuālās mašīnas
+* To var nokonfigurēt uz windows izmantojot 2.2. solī minēto informāciju, bet tagad vairs nav nepieciešams neko citu palaist uz personīgā datora, vajag nokonfiguēt tikai dns iestatījumus (Tagad 127.0.0.1 vietā jāiestata 18.208.150.9)
+* DNS pieprasījumi parādīsies visual.harak.lat dashboardā kad no datora veiks dns pieprasījumus - lietos pārlūku vai vienkārši eksistēs (windows :D)
 
 ## Potenciālā sistēmas shēma
 ![Alt text](Docs/DNSNotify.drawio.png)
