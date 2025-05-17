@@ -27,6 +27,8 @@
 * Kad vajag izslēgt - ```./stop-stack.ps1```
 * Ja vajag izslēgt un izdzēst visus volumes - ```./purge-stack.ps1``` - ja parādās kļūdas, tad izpildīt vēlreiz līdz brīdim, kad saka "Purge complete"
 * Ja gadījumā kas, tad var apturēt arī izmantojot ```docker stack rm dnsnotify```
+* Var apskatīties vai strādā - ```docker service ls```
+* Log faili konkrētam konteinerim - ```docker service logs dnsnotify_<servisa nosakums>```
 
 ## 2. Izmēģinājums
 * Šobrīd automātiski tiek veikta automātiska dns pieprasījumu veikšana no test-client konteinera (katras 30 sekundes)
@@ -114,7 +116,7 @@
 * Tagad ir pieejams arī publisks dns serveris, kas ir piesaistīts pie primārā harak.lat servera
 * Tas darbojas uz amazon virtuālās mašīnas
 * To var nokonfigurēt uz windows izmantojot 2.2. solī minēto informāciju, bet tagad vairs nav nepieciešams neko citu palaist uz personīgā datora, vajag nokonfiguēt tikai dns iestatījumus (Tagad 127.0.0.1 vietā jāiestata 18.208.150.9)
-* DNS pieprasījumi parādīsies visual.harak.lat dashboardā kad no datora veiks dns pieprasījumus - lietos pārlūku vai vienkārši eksistēs (windows :D)
+* DNS pieprasījumi parādīsies visual.harak.lat dashboardā, kad no datora veiks dns pieprasījumus - lietos pārlūku vai vienkārši eksistēs (windows :D)
 
 ## Potenciālā sistēmas shēma
 ![Alt text](Docs/DNSNotify.drawio.png)
