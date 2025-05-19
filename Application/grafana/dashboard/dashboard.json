@@ -23,12 +23,13 @@
   "panels": [
     {
       "datasource": {
-        "uid": "grafana-clickhouse-datasource"
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ael9uo16mu7lsd"
       },
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "continuous-GrYlRd"
           },
           "custom": {
             "axisBorderShow": false,
@@ -36,16 +37,28 @@
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
-            "fillOpacity": 57,
-            "gradientMode": "none",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "scheme",
             "hideFrom": {
               "legend": false,
               "tooltip": false,
               "viz": false
             },
-            "lineWidth": 1,
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 3,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -60,7 +73,7 @@
               },
               {
                 "color": "red",
-                "value": 30
+                "value": 80
               }
             ]
           }
@@ -68,35 +81,24 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 10,
-        "w": 13,
+        "h": 7,
+        "w": 12,
         "x": 0,
         "y": 0
       },
-      "id": 1,
+      "id": 7,
       "options": {
-        "barRadius": 0,
-        "barWidth": 1,
-        "colorByField": "domain",
-        "fullHighlight": false,
-        "groupWidth": 0.7,
         "legend": {
           "calcs": [],
-          "displayMode": "list",
+          "displayMode": "hidden",
           "placement": "right",
-          "showLegend": true
+          "showLegend": false
         },
-        "orientation": "horizontal",
-        "showValue": "auto",
-        "stacking": "none",
         "tooltip": {
           "hideZeros": false,
           "mode": "single",
           "sort": "none"
-        },
-        "xField": "domain",
-        "xTickLabelRotation": 0,
-        "xTickLabelSpacing": 0
+        }
       },
       "pluginVersion": "12.0.0",
       "targets": [
@@ -105,10 +107,10 @@
             "aggregates": [],
             "columns": [
               {
-                "alias": "client_ip",
+                "alias": "log_time",
                 "custom": false,
-                "name": "client_ip",
-                "type": "Nullable(IPv4)"
+                "name": "log_time",
+                "type": "DateTime64(3, 'Europe/Riga')"
               }
             ],
             "database": "default",
@@ -121,22 +123,17 @@
             "queryType": "table",
             "table": "dns_logs"
           },
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ael9uo16mu7lsd"
-          },
           "editorType": "sql",
           "format": 1,
-          "hide": false,
           "meta": {
             "builderOptions": {
               "aggregates": [],
               "columns": [
                 {
-                  "alias": "client_ip",
+                  "alias": "log_time",
                   "custom": false,
-                  "name": "client_ip",
-                  "type": "Nullable(IPv4)"
+                  "name": "log_time",
+                  "type": "DateTime64(3, 'Europe/Riga')"
                 }
               ],
               "database": "default",
@@ -152,12 +149,12 @@
           },
           "pluginVersion": "4.8.2",
           "queryType": "table",
-          "rawSql": "SELECT domain, COUNT(*) AS requests\r\nFROM dns_logs\r\nGROUP BY domain\r\nORDER BY requests DESC;\r\n\r\n",
-          "refId": "B"
+          "rawSql": "SELECT\r\n  toStartOfMinute(log_time) AS time,\r\n  COUNT(*) AS dns_requests\r\nFROM dns_logs\r\nGROUP BY time\r\nORDER BY time;\r\n",
+          "refId": "A"
         }
       ],
-      "title": "Top domains",
-      "type": "barchart"
+      "title": "DNS requests over time",
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -167,22 +164,103 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "fixedColor": "dark-red",
+            "mode": "fixed"
           },
+          "displayName": "Malicious domains",
           "mappings": [],
           "thresholds": {
             "mode": "percentage",
             "steps": [
               {
                 "color": "green"
-              },
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "label"
+            },
+            "properties": [
               {
-                "color": "orange",
-                "value": 70
-              },
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "id": 9,
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "pluginVersion": "12.0.0",
+      "targets": [
+        {
+          "editorType": "sql",
+          "format": 1,
+          "meta": {
+            "builderOptions": {
+              "columns": [],
+              "database": "",
+              "limit": 1000,
+              "mode": "list",
+              "queryType": "table",
+              "table": ""
+            }
+          },
+          "pluginVersion": "4.8.2",
+          "queryType": "table",
+          "rawSql": "SELECT\r\n  'Malicious' AS label,\r\n  COUNT(*) AS count\r\nFROM dns_logs\r\nWHERE\r\n  prediction = 1\r\n  AND $__timeFilter(log_time)\r\n",
+          "refId": "A"
+        }
+      ],
+      "title": "",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ael9uo16mu7lsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "dark-green",
+            "mode": "fixed"
+          },
+          "displayName": "Benign domains",
+          "fieldMinMax": false,
+          "mappings": [],
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
               {
-                "color": "red",
-                "value": 85
+                "color": "green"
               }
             ]
           }
@@ -190,57 +268,47 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 13,
+        "h": 7,
+        "w": 4,
+        "x": 16,
         "y": 0
       },
-      "id": 4,
+      "id": 10,
       "options": {
         "minVizHeight": 75,
         "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
           "calcs": [],
-          "fields": "/^count$/",
+          "fields": "",
           "values": true
         },
         "showThresholdLabels": false,
-        "showThresholdMarkers": false,
+        "showThresholdMarkers": true,
         "sizing": "auto"
       },
       "pluginVersion": "12.0.0",
       "targets": [
         {
-          "builderOptions": {
-            "columns": [],
-            "database": "default",
-            "limit": 1000,
-            "meta": {},
-            "mode": "list",
-            "queryType": "table",
-            "table": "dns_logs"
-          },
           "editorType": "sql",
           "format": 1,
           "meta": {
             "builderOptions": {
               "columns": [],
-              "database": "default",
+              "database": "",
               "limit": 1000,
-              "meta": {},
               "mode": "list",
               "queryType": "table",
-              "table": "dns_logs"
+              "table": ""
             }
           },
           "pluginVersion": "4.8.2",
           "queryType": "table",
-          "rawSql": "SELECT\r\n  CASE WHEN prediction = 1 THEN 'Malicious' ELSE 'Benign' END AS label,\r\n  COUNT(*) AS count\r\nFROM dns_logs\r\nGROUP BY label;\r\n",
+          "rawSql": "SELECT\r\n  'Benign' AS label,\r\n  COUNT(*) AS count\r\nFROM dns_logs\r\nWHERE\r\n  prediction = 0\r\n  AND $__timeFilter(log_time)",
           "refId": "A"
         }
       ],
-      "title": "Malicious vs Benign DNS",
+      "title": "",
       "type": "gauge"
     },
     {
@@ -292,9 +360,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 5,
-        "w": 5,
-        "x": 19,
+        "h": 7,
+        "w": 4,
+        "x": 20,
         "y": 0
       },
       "id": 5,
@@ -307,7 +375,7 @@
           "calcs": [],
           "displayMode": "list",
           "placement": "right",
-          "showLegend": true
+          "showLegend": false
         },
         "orientation": "auto",
         "showValue": "never",
@@ -429,7 +497,7 @@
           },
           "pluginVersion": "4.8.2",
           "queryType": "table",
-          "rawSql": "SELECT\r\n  protocol,\r\n  COUNT(*) AS request_count\r\nFROM\r\n  dns_logs\r\nGROUP BY\r\n  protocol\r\nORDER BY\r\n  request_count DESC;",
+          "rawSql": "SELECT\r\n  protocol,\r\n  COUNT(*) AS request_count\r\nFROM\r\n  dns_logs\r\nWHERE\r\n  $__timeFilter(log_time)\r\nGROUP BY\r\n  protocol\r\nORDER BY\r\n  request_count DESC;",
           "refId": "A"
         }
       ],
@@ -445,39 +513,6 @@
         "defaults": {
           "color": {
             "mode": "continuous-GrYlRd"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "gradientMode": "scheme",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineWidth": 3,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
           },
           "mappings": [],
           "thresholds": {
@@ -497,260 +532,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 11,
-        "x": 13,
-        "y": 5
-      },
-      "id": 7,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "hidden",
-          "placement": "right",
-          "showLegend": false
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.0.0",
-      "targets": [
-        {
-          "builderOptions": {
-            "aggregates": [],
-            "columns": [
-              {
-                "alias": "log_time",
-                "custom": false,
-                "name": "log_time",
-                "type": "DateTime64(3, 'Europe/Riga')"
-              }
-            ],
-            "database": "default",
-            "filters": [],
-            "groupBy": [],
-            "limit": 1000,
-            "meta": {},
-            "mode": "list",
-            "orderBy": [],
-            "queryType": "table",
-            "table": "dns_logs"
-          },
-          "editorType": "sql",
-          "format": 1,
-          "meta": {
-            "builderOptions": {
-              "aggregates": [],
-              "columns": [
-                {
-                  "alias": "log_time",
-                  "custom": false,
-                  "name": "log_time",
-                  "type": "DateTime64(3, 'Europe/Riga')"
-                }
-              ],
-              "database": "default",
-              "filters": [],
-              "groupBy": [],
-              "limit": 1000,
-              "meta": {},
-              "mode": "list",
-              "orderBy": [],
-              "queryType": "table",
-              "table": "dns_logs"
-            }
-          },
-          "pluginVersion": "4.8.2",
-          "queryType": "table",
-          "rawSql": "SELECT\r\n  toStartOfMinute(log_time) AS time,\r\n  COUNT(*) AS dns_requests\r\nFROM dns_logs\r\nGROUP BY time\r\nORDER BY time;\r\n",
-          "refId": "A"
-        }
-      ],
-      "title": "DNS requests over time",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ael9uo16mu7lsd"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "fillOpacity": 80,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineWidth": 2,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 0.5
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "highest_malicious_probability"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "thresholds"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 13,
+        "w": 12,
         "x": 0,
-        "y": 10
-      },
-      "id": 3,
-      "options": {
-        "barRadius": 0,
-        "barWidth": 1,
-        "fullHighlight": false,
-        "groupWidth": 0.7,
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "right",
-          "showLegend": true
-        },
-        "orientation": "horizontal",
-        "showValue": "auto",
-        "stacking": "none",
-        "text": {},
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        },
-        "xTickLabelRotation": 0,
-        "xTickLabelSpacing": 0
-      },
-      "pluginVersion": "12.0.0",
-      "targets": [
-        {
-          "builderOptions": {
-            "aggregates": [],
-            "columns": [
-              {
-                "alias": "flags",
-                "custom": false,
-                "name": "flags",
-                "type": "Nullable(String)"
-              }
-            ],
-            "database": "default",
-            "filters": [],
-            "groupBy": [],
-            "limit": 1000,
-            "meta": {},
-            "mode": "list",
-            "orderBy": [],
-            "queryType": "table",
-            "table": "dns_logs"
-          },
-          "editorType": "sql",
-          "format": 1,
-          "meta": {
-            "builderOptions": {
-              "aggregates": [],
-              "columns": [
-                {
-                  "alias": "flags",
-                  "custom": false,
-                  "name": "flags",
-                  "type": "Nullable(String)"
-                }
-              ],
-              "database": "default",
-              "filters": [],
-              "groupBy": [],
-              "limit": 1000,
-              "meta": {},
-              "mode": "list",
-              "orderBy": [],
-              "queryType": "table",
-              "table": "dns_logs"
-            }
-          },
-          "pluginVersion": "4.8.2",
-          "queryType": "table",
-          "rawSql": "SELECT\r\n    domain,\r\n    max(malicious_probability) AS highest_malicious_probability\r\nFROM dns_logs\r\nWHERE malicious_probability > 0.0\r\nGROUP BY domain\r\nORDER BY highest_malicious_probability DESC;\r\n",
-          "refId": "A"
-        }
-      ],
-      "title": "Malicious probability",
-      "type": "barchart"
-    },
-    {
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ael9uo16mu7lsd"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "continuous-GrYlRd"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 11,
-        "x": 13,
-        "y": 13
+        "y": 7
       },
       "id": 6,
       "options": {
@@ -846,15 +630,496 @@
           },
           "pluginVersion": "4.8.2",
           "queryType": "table",
-          "rawSql": "SELECT\r\n  domain,\r\n  MAX(response_time) AS max_response_time\r\nFROM dns_logs\r\nGROUP BY domain\r\nORDER BY max_response_time DESC\r\nLIMIT 10;\r\n",
+          "rawSql": "SELECT\r\n  domain,\r\n  MAX(response_time) AS max_response_time\r\nFROM dns_logs\r\nWHERE $__timeFilter(log_time)\r\nGROUP BY domain\r\nORDER BY max_response_time DESC\r\nLIMIT 10;",
           "refId": "A"
         }
       ],
       "title": "Highest response time",
       "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ael9uo16mu7lsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "dark-green",
+                "value": 0
+              },
+              {
+                "color": "dark-red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "prediction"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "applyToRow": true,
+                  "type": "color-background",
+                  "wrapText": false
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "dark-red",
+                        "index": 0
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "prediction"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": []
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "prediction"
+            },
+            "properties": [
+              {
+                "id": "custom.align",
+                "value": "center"
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "malicious_probability"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              },
+              {
+                "id": "custom.align",
+                "value": "center"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 7
+      },
+      "id": 8,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "enablePagination": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "12.0.0",
+      "targets": [
+        {
+          "builderOptions": {
+            "columns": [],
+            "database": "default",
+            "limit": 1000,
+            "meta": {},
+            "mode": "list",
+            "queryType": "table",
+            "table": "dns_logs"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "meta": {
+            "builderOptions": {
+              "columns": [],
+              "database": "default",
+              "limit": 1000,
+              "meta": {},
+              "mode": "list",
+              "queryType": "table",
+              "table": "dns_logs"
+            }
+          },
+          "pluginVersion": "4.8.2",
+          "queryType": "table",
+          "rawSql": "SELECT domain, log_time, prediction, malicious_probability\r\nFROM dns_logs\r\nORDER BY log_time DESC;\r\n",
+          "refId": "A"
+        }
+      ],
+      "title": "",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ael9uo16mu7lsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineWidth": 2,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "highest_malicious_probability"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "id": 3,
+      "options": {
+        "barRadius": 0,
+        "barWidth": 1,
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": false
+        },
+        "orientation": "horizontal",
+        "showValue": "auto",
+        "stacking": "none",
+        "text": {},
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "pluginVersion": "12.0.0",
+      "targets": [
+        {
+          "builderOptions": {
+            "aggregates": [],
+            "columns": [
+              {
+                "alias": "flags",
+                "custom": false,
+                "name": "flags",
+                "type": "Nullable(String)"
+              }
+            ],
+            "database": "default",
+            "filters": [],
+            "groupBy": [],
+            "limit": 1000,
+            "meta": {},
+            "mode": "list",
+            "orderBy": [],
+            "queryType": "table",
+            "table": "dns_logs"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "meta": {
+            "builderOptions": {
+              "aggregates": [],
+              "columns": [
+                {
+                  "alias": "flags",
+                  "custom": false,
+                  "name": "flags",
+                  "type": "Nullable(String)"
+                }
+              ],
+              "database": "default",
+              "filters": [],
+              "groupBy": [],
+              "limit": 1000,
+              "meta": {},
+              "mode": "list",
+              "orderBy": [],
+              "queryType": "table",
+              "table": "dns_logs"
+            }
+          },
+          "pluginVersion": "4.8.2",
+          "queryType": "table",
+          "rawSql": "SELECT\r\n    domain,\r\n    MAX(malicious_probability) AS highest_malicious_probability\r\nFROM dns_logs\r\nWHERE malicious_probability > 0.0\r\n  AND $__timeFilter(log_time)\r\nGROUP BY domain\r\nORDER BY highest_malicious_probability DESC\r\nLIMIT 10;\r\n",
+          "refId": "A"
+        }
+      ],
+      "title": "Malicious probability",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ael9uo16mu7lsd"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "fillOpacity": 57,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineWidth": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 30
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "requests"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "id": 1,
+      "options": {
+        "barRadius": 0,
+        "barWidth": 1,
+        "colorByField": "domain",
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": false
+        },
+        "orientation": "horizontal",
+        "showValue": "auto",
+        "stacking": "none",
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        },
+        "xField": "domain",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "pluginVersion": "12.0.0",
+      "targets": [
+        {
+          "builderOptions": {
+            "aggregates": [],
+            "columns": [
+              {
+                "alias": "client_ip",
+                "custom": false,
+                "name": "client_ip",
+                "type": "Nullable(IPv4)"
+              }
+            ],
+            "database": "default",
+            "filters": [],
+            "groupBy": [],
+            "limit": 1000,
+            "meta": {},
+            "mode": "list",
+            "orderBy": [],
+            "queryType": "table",
+            "table": "dns_logs"
+          },
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "ael9uo16mu7lsd"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "hide": false,
+          "meta": {
+            "builderOptions": {
+              "aggregates": [],
+              "columns": [
+                {
+                  "alias": "client_ip",
+                  "custom": false,
+                  "name": "client_ip",
+                  "type": "Nullable(IPv4)"
+                }
+              ],
+              "database": "default",
+              "filters": [],
+              "groupBy": [],
+              "limit": 1000,
+              "meta": {},
+              "mode": "list",
+              "orderBy": [],
+              "queryType": "table",
+              "table": "dns_logs"
+            }
+          },
+          "pluginVersion": "4.8.2",
+          "queryType": "table",
+          "rawSql": "SELECT\r\n  domain,\r\n  COUNT(*) AS requests\r\nFROM dns_logs\r\nWHERE $__timeFilter(log_time)\r\nGROUP BY domain\r\nORDER BY requests DESC\r\nLIMIT 10;\r\n",
+          "refId": "B"
+        }
+      ],
+      "title": "Top domains",
+      "type": "barchart"
     }
   ],
   "preload": false,
+  "refresh": "10s",
   "schemaVersion": 41,
   "tags": [],
   "templating": {
@@ -868,5 +1133,5 @@
   "timezone": "browser",
   "title": "New new new new dashboard",
   "uid": "new323121233121",
-  "version": 18
+  "version": 1
 }
