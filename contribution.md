@@ -29,4 +29,23 @@ Grafana vidē izstrādāts dashboard, kas satur vizualizācijas DNS pieprasījum
 3. Tiek veidoti un testēti SQL vaicājumi datu iegūšanai un vizualizēšanai
 4. Vizualizācijas tiek izveidotas interaktīvas un automātiski pielāgojas dashboard iestatītajam laika periodam 
 ### Rezultāti
-Tika izveidots Grafana dashboard ar interaktīvām vizualizācijām reāllaika DNS pieprasījumu monitoringa un analīzes vajadzībām. 
+Tika izveidots Grafana dashboard ar interaktīvām vizualizācijām reāllaika DNS pieprasījumu monitoringa un analīzes vajadzībām.
+
+
+## Māris:
+ML modeļa izstrāde un apmācība
+### Risinājuma apraksts
+Projekta ietvaros tika izstrādāts ML modelis, kas balstīts uz Gadījuma meža (Random Forest) klasifikatoru. Modeļa izstrādē izpētīti esošie pētījumi, kuru idejas izmantotas
+arī šī darba izstrādē:
+Kolla, T. (2023). A Machine Learning Approach to Identifying Malicious DNS Requests through Server Log Analysis (Doctoral dissertation, Dublin Business School).
+Marques, C., Malta, S., & Magalhães, J. P. (2021). DNS dataset for malicious domains detection. Data in brief, 38, 107342.
+Singh, S. K., & Roy, P. K. (2022). Malicious traffic detection of DNS over https using ensemble machine learning. International Journal of Computing and Digital Systems, 11(1), 189-197.
+ML modelis ir izvietots uz Docker konteinera un veic DNS pieprasījumu apstrādi reāllaikā, bet neveic kādas citas darbības. Klasifikācijas rezultāts tiek nosūtīts uz datubāzi tālākai analīzei.
+### Realizācijas gaita
+1. Izpētītas esošās pieejas DNS pieprasījumu klasificēšanai.
+2. Izpētīta DNS log struktūra un sagatavots kods īpašību izgūšanai.
+3. Apkopota pašu datu kopa no dažādiem avotiem, kas satur gan ļaunprātīgus, gan neļaunprātīgus pieprasījumus.
+4. Veikta RandomForest klasifikātora izveide un apmācība uz esošās datu kopas
+5. RandomForest klasifikātors tiek izvietots uz Docker konteinera un savienots ar citiem servisiem, lai veiktu pieprasījumu apstrādi. 
+### Rezultāti
+Iegūts ML modelis, kas spēj klasificēt ienākošos DNS pieprasījumus. Sākotnējais modelis trenēts uz publiskām datu kopām darbojās slikti, tāpēc tika izveidota pašu apkopota datu kopa, kura uzlaboja klasifikācijas precizitāti. Turpmākajai lietošanai var apskatīt sarežģītākus modeļus, kas spētu saskatīt sakarības laikā (LSTM, Transformers), kā arī mainīt izmantotās īpašības no loga, atkarībā no pielietošanas mērķa un nepieciešamās precizitātes, jo šobrīd modelis nespēj pilnīgi korekti klasificēt katru ierakstu.
