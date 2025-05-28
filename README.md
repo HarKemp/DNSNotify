@@ -1,6 +1,12 @@
 # DNSNotify
 
-# Uzstādīšana un izmēģinājums ar datu bāzi
+## Sistēmas izkārtojums
+![Alt text](Docs/DNSNotify.drawio.png)
+
+## Grupas dalībnieku sniegums un projekta apraksts
+![contribution.md](contribution.md)
+
+# Sistēmas Uzstādīšana un izmēģinājums ar datu bāzi
 ## 1. Uzstādīšana
 * Instalē Docker desktop
 * Noklonē DNSNotify repozitoriju
@@ -118,6 +124,5 @@
 * To var nokonfigurēt uz windows izmantojot 2.2. solī minēto informāciju, bet tagad vairs nav nepieciešams neko citu palaist uz personīgā datora, vajag nokonfiguēt tikai dns iestatījumus (Tagad 127.0.0.1 vietā jāiestata 18.208.150.9)
 * DNS pieprasījumi parādīsies visual.harak.lat dashboardā, kad no datora veiks dns pieprasījumus - lietos pārlūku vai vienkārši eksistēs (windows :D)
 
-## Potenciālā sistēmas shēma
-![Alt text](Docs/DNSNotify.drawio.png)
+
 
