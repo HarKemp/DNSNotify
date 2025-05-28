@@ -1,7 +1,7 @@
 # DNSNotify
 
 ## Sistēmas izkārtojums
-![Alt text](Docs/izkartojums-drawion.png)
+![Alt text](Docs/izkartojums-drawio.png)
 
 ## Grupas dalībnieku sniegums un projekta apraksts
 ![contribution.md](contribution.md)
